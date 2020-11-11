@@ -45,7 +45,8 @@ workspace('imgui-nodegraph')
   location('.build/'.._ACTION)
   includedirs({
     'deps/imgui',
-    'deps/spdlog/include'
+    'deps/spdlog/include',
+    'deps/glm'
   })
   startproject('nodegrapher')
   defines({
