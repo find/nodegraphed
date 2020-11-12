@@ -249,6 +249,8 @@ static void ShowExampleAppCustomNodeGraph(bool* opened)
 
 namespace app {
 
+editorui::Graph graph;
+
 void init()
 {
 #ifdef _WIN32
@@ -258,15 +260,18 @@ void init()
   spdlog::set_default_logger(std::make_shared<spdlog::logger>("", std::make_shared<spdlog::sinks::ansicolor_stdout_sink_mt>()));
 #endif
   spdlog::set_level(spdlog::level::debug);
-  ImGui::StyleColorsLight();
+  ImGui::StyleColorsDark();
+
+  for (int i = 0; i < 20; ++i) {
+    graph.nodes.emplace_back();
+    graph.nodes.back().pos.y = i*80;
+  }
 }
 
 bool show_demo_window = true;
 bool show_another_window = true;
 bool show_ng_window = true;
 float clear_color[3] = { 0.1f,0.1f,0.1f };
-
-editorui::Graph graph;
 
 void update() {
   editorui::draw(graph);

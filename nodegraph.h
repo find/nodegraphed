@@ -3,11 +3,12 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <set>
+#include <cstdint>
 
 namespace editorui {
 
 struct Node {
-  size_t id;
   std::string name;
   int numInputs;
   int numOutpus;
@@ -21,6 +22,33 @@ struct Graph {
   std::vector<Node> nodes;
   std::vector<size_t> nodeorder;
   bool showGrid = 1;
+  size_t selectedNode = -1;
+  std::set<size_t> nodeSelection;
+  enum class OperationState : uint8_t {
+    VIEWING,
+    BOX_SELECTING,
+    BOX_DESELECTING,
+  } operationState;
+  glm::vec2 selectionBoxStart;
+  glm::vec2 selectionBoxEnd;
+
+  void addNode(Node const& node) {
+    nodes.push_back(node);
+    initOrder();
+  }
+
+  void removeNode(size_t idx) {
+    nodes.erase(nodes.begin() + idx);
+    auto itr = std::find(nodeorder.begin(), nodeorder.end(), idx);
+    nodeorder.erase(itr);
+    for (auto& i : nodeorder) {
+      if (i > idx) --i;
+    }
+    if (selectedNode == idx)
+      selectedNode = -1;
+    else if (selectedNode > idx)
+      selectedNode -= 1;
+  }
 
   void initOrder() {
     size_t oldsize = nodeorder.size();
@@ -34,7 +62,7 @@ struct Graph {
     initOrder();
     size_t idx = 0;
     for (; idx < nodeorder.size(); ++idx)
-      if (nodes[idx].id == nodeid) break;
+      if (nodeorder[idx] == nodeid) break;
     if (idx < nodeorder.size()) {
       for (size_t i = idx + 1; i < nodeorder.size(); ++i) {
         nodeorder[i - 1] = nodeorder[i];
