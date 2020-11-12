@@ -22,12 +22,13 @@ struct Graph {
   std::vector<Node> nodes;
   std::vector<size_t> nodeorder;
   bool showGrid = 1;
-  size_t selectedNode = -1;
+  size_t activeNode = -1;
   std::set<size_t> nodeSelection;
   enum class OperationState : uint8_t {
     VIEWING,
     BOX_SELECTING,
     BOX_DESELECTING,
+    NEWNODE_PENDING_CONFIRM
   } operationState;
   glm::vec2 selectionBoxStart;
   glm::vec2 selectionBoxEnd;
@@ -44,10 +45,10 @@ struct Graph {
     for (auto& i : nodeorder) {
       if (i > idx) --i;
     }
-    if (selectedNode == idx)
-      selectedNode = -1;
-    else if (selectedNode > idx)
-      selectedNode -= 1;
+    if (activeNode == idx)
+      activeNode = -1;
+    else if (activeNode > idx)
+      activeNode -= 1;
   }
 
   void initOrder() {

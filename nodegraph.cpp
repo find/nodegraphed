@@ -40,7 +40,7 @@ void draw(Graph& graph) {
     ImGui::EndMenuBar();
   }
 
-  ImDrawList* draw_list = ImGui::GetWindowDrawList();
+  ImDrawList* drawList = ImGui::GetWindowDrawList();
   ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32(25, 25, 25, 255));
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
   ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
@@ -71,11 +71,11 @@ void draw(Graph& graph) {
     auto gridOffset = viewxform * glm::vec3(0, 0, 1);
     for (float x = fmodf(gridOffset.x - winPos.x, GRID_SZ * graph.scale);
          x < canvasSize.x; x += GRID_SZ * graph.scale)
-      draw_list->AddLine(ImVec2(x, 0) + winPos,
+      drawList->AddLine(ImVec2(x, 0) + winPos,
                          ImVec2(x, canvasSize.y) + winPos, GRID_COLOR);
     for (float y = fmodf(gridOffset.y - winPos.y, GRID_SZ * graph.scale);
          y < canvasSize.y; y += GRID_SZ * graph.scale)
-      draw_list->AddLine(ImVec2(0, y) + winPos,
+      drawList->AddLine(ImVec2(0, y) + winPos,
                          ImVec2(canvasSize.x, y) + winPos, GRID_COLOR);
   }
 
@@ -102,10 +102,10 @@ void draw(Graph& graph) {
   float const sbbmaxy =
       std::max(graph.selectionBoxStart.y, graph.selectionBoxEnd.y);
   if (graph.operationState == Graph::OperationState::BOX_SELECTING) {
-    draw_list->AddRectFilled(ImVec2(sbbminx, sbbminy), ImVec2(sbbmaxx, sbbmaxy),
+    drawList->AddRectFilled(ImVec2(sbbminx, sbbminy), ImVec2(sbbmaxx, sbbmaxy),
                              SELECTION_BOX_COLOR);
   } else if (graph.operationState == Graph::OperationState::BOX_DESELECTING) {
-    draw_list->AddRectFilled(ImVec2(sbbminx, sbbminy), ImVec2(sbbmaxx, sbbmaxy),
+    drawList->AddRectFilled(ImVec2(sbbminx, sbbminy), ImVec2(sbbmaxx, sbbmaxy),
                              DESELECTION_BOX_COLOR);
   }
   for (size_t i = 0; i < graph.nodeorder.size(); ++i) {
@@ -123,40 +123,81 @@ void draw(Graph& graph) {
 
     if (graph.operationState == Graph::OperationState::BOX_SELECTING ||
         graph.operationState == Graph::OperationState::BOX_DESELECTING) {
-      if (topleft.x >= sbbminx && bottomright.x <= sbbmaxx &&
-          topleft.y >= sbbminy && bottomright.y <= sbbmaxy) {
+      if (bottomright.x >= sbbminx && topleft.x <= sbbmaxx &&
+          bottomright.y >= sbbminy && topleft.y <= sbbmaxy) {
         nodeSelection.insert(idx);
       }
     }
   }
-  if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && length(mouseDelta) < 10) {
+  if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
     clickedNode = hoveredNode;
-    graph.selectedNode = clickedNode;
-    graph.nodeSelection.insert(clickedNode);
-    graph.shiftToEnd(clickedNode);
+    graph.activeNode = clickedNode;
+    if (clickedNode != -1 &&
+      (glm::distance(graph.selectionBoxStart, graph.selectionBoxEnd) < 4 ||
+       graph.nodeSelection.empty())) {
+      graph.nodeSelection.insert(clickedNode);
+      graph.shiftToEnd(clickedNode);
+    }
 
     auto const modkey = ImGui::GetIO().KeyMods;
     if (graph.operationState == Graph::OperationState::VIEWING) {
+      graph.selectionBoxStart = glm::vec2(mousePos.x, mousePos.y);
       if (modkey & (ImGuiKeyModFlags_Shift | (~ImGuiKeyModFlags_Ctrl))) {
         graph.operationState = Graph::OperationState::BOX_SELECTING;
-        graph.selectionBoxStart = glm::vec2(mousePos.x, mousePos.y);
       } else if (modkey & (ImGuiKeyModFlags_Ctrl | (~ImGuiKeyModFlags_Shift))) {
         graph.operationState = Graph::OperationState::BOX_DESELECTING;
-        graph.selectionBoxStart = glm::vec2(mousePos.x, mousePos.y);
       }
-    } else {
+
+      if (graph.operationState == Graph::OperationState::BOX_SELECTING) {
+        if (clickedNode != -1)
+          graph.nodeSelection.insert(clickedNode);
+      }
+      else if (graph.operationState == Graph::OperationState::BOX_DESELECTING) {
+        if (clickedNode != -1)
+          graph.nodeSelection.erase(clickedNode);
+      }
+    }
+  }
+  if (graph.operationState == Graph::OperationState::VIEWING &&
+             ImGui::IsMouseDragging(ImGuiMouseButton_Left, 10)) {
+    if (hoveredNode == -1 &&
+        clickedNode == -1 &&
+        graph.activeNode == -1) {
+      graph.operationState = Graph::OperationState::BOX_SELECTING;
       graph.nodeSelection.clear();
     }
-  }
-  if (graph.operationState == Graph::OperationState::BOX_SELECTING) {
-    for (auto idx : nodeSelection) {
-      graph.nodeSelection.insert(idx);
+    else if (graph.activeNode!=-1 && graph.nodeSelection.find(graph.activeNode) != graph.nodeSelection.end()) {
+      auto const srcDelta = glm::xy(glm::inverse(viewxform) *
+        glm::vec3(mouseDelta.x, mouseDelta.y, 0.0));
+      if (glm::length(srcDelta) > 0) {
+        for (size_t idx : graph.nodeSelection)
+          graph.nodes[idx].pos += srcDelta;
+      }
     }
-  } else if (graph.operationState == Graph::OperationState::BOX_DESELECTING) {
-    for (auto idx : nodeSelection) {
-      graph.nodeSelection.erase(idx);
+  }
+  if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+    if (graph.operationState == Graph::OperationState::BOX_SELECTING ||
+        graph.operationState == Graph::OperationState::BOX_DESELECTING) {
+      if (graph.operationState == Graph::OperationState::BOX_SELECTING) {
+        for (auto idx : nodeSelection) {
+          graph.nodeSelection.insert(idx);
+        }
+      } else if (graph.operationState == Graph::OperationState::BOX_DESELECTING) {
+        for (auto idx : nodeSelection) {
+          graph.nodeSelection.erase(idx);
+        }
+      }
+      graph.operationState = Graph::OperationState::VIEWING;
+    }
+    else if (hoveredNode == -1 && clickedNode == -1 && graph.activeNode == -1) {
+      graph.nodeSelection.clear();
+    }
+    else if (graph.activeNode != -1 && glm::distance(graph.selectionBoxStart, graph.selectionBoxEnd) < 4) {
+      graph.nodeSelection.clear();
+      graph.nodeSelection.insert(graph.activeNode);
     }
   }
+
   // second pass: do drawing
   for (size_t i = 0; i < graph.nodeorder.size(); ++i) {
     size_t const idx = graph.nodeorder[i];
@@ -168,13 +209,14 @@ void draw(Graph& graph) {
                                 center.y + NODE_SIZE.y / 2.f * graph.scale};
 
     ImU32 const color =
-        graph.selectedNode == idx
+            graph.nodeSelection.find(idx) != graph.nodeSelection.end() || nodeSelection.find(idx) != nodeSelection.end()
             ? SELECTED_NODE_COLOR
             : hoveredNode == idx ? HOVER_NODE_COLOR : DEFAULT_NODE_COLOR;
-    draw_list->AddRectFilled(topleft, bottomright, color, 6.f * graph.scale);
+    drawList->AddRectFilled(topleft, bottomright, color, 6.f * graph.scale);
 
-    if (idx == graph.selectedNode)
-      draw_list->AddRect(topleft, bottomright, IM_COL32(255, 255, 255, 255),
+    //if (idx == graph.selectedNode)
+    if (graph.nodeSelection.find(idx) != graph.nodeSelection.end())
+      drawList->AddRect(topleft, bottomright, IM_COL32(255, 255, 255, 255),
                          6.f * graph.scale);
   }
 
@@ -188,12 +230,7 @@ void draw(Graph& graph) {
       auto const srcDelta = glm::xy(glm::inverse(viewxform) *
                                     glm::vec3(mouseDelta.x, mouseDelta.y, 0.0));
       graph.offset += srcDelta;
-    } else if (graph.selectedNode != -1 &&
-               ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
-      auto const srcDelta = glm::xy(glm::inverse(viewxform) *
-                                    glm::vec3(mouseDelta.x, mouseDelta.y, 0.0));
-      graph.nodes[graph.selectedNode].pos += srcDelta;
-    }
+    } 
     if (abs(ImGui::GetIO().MouseWheel) > 0.1) {
       graph.scale = glm::clamp(graph.scale + ImGui::GetIO().MouseWheel / 20.f,
                                0.1f, 10.f);
