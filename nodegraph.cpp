@@ -16,7 +16,7 @@ static inline ImVec2 operator+(const ImVec2& lhs, const ImVec2& rhs) {
 static inline ImVec2 operator-(const ImVec2& lhs, const ImVec2& rhs) {
   return ImVec2(lhs.x - rhs.x, lhs.y - rhs.y);
 }
-static inline ImVec2 operator*(const glm::mat3 const& m, const ImVec2& v) {
+static inline ImVec2 operator*(const glm::mat3& m, const ImVec2& v) {
   auto r = m * glm::vec3(v.x, v.y, 1.0f);
   return ImVec2(r.x, r.y);
 }
@@ -55,50 +55,33 @@ void draw(Graph& graph) {
   };
   glm::mat3 viewxform = calcViewMatrix();
 
-  // spdlog::debug("viewxform = {}", glm::to_string(viewxform));
-
-
   // Display grid
   if (graph.showGrid) {
     ImU32 GRID_COLOR = IM_COL32(80, 80, 80, 40);
     float GRID_SZ = 24.0f;
-    //glm::mat3 viewscale = glm::scale(glm::identity<glm::mat3>(),
-    //  glm::vec2(graph.scale, graph.scale));
-    //glm::mat3 viewtranslate = glm::translate(glm::identity<glm::mat3>(), graph.offset);
-    //glm::highp_vec3 gridOffsets[] = {
-    //  viewxform * glm::vec3(graph.offset, 0),
-    //  viewxform * glm::vec3(graph.offset, 1),
-    //  viewscale * viewtranslate * glm::vec3(0, 0, 1),
-    //  viewxform * glm::vec3(0, 0, 1),
-    //  viewxform * glm::vec3(0, 0, 0),
-    //  viewxform * glm::vec3(0, 0, 0) + glm::vec3(winPos.x, winPos.y, 0),
-    //  viewscale * viewtranslate * glm::vec3(graph.offset, 1.0),
-    //  viewscale * glm::vec3(graph.offset, 1.0),
-    //};
-    //static int gridMethod=0;
-    //ImGui::SliderInt("Grid Method", &gridMethod, 0, sizeof(gridOffsets)/sizeof(gridOffsets[0])-1);
-    //auto const gridOffset = gridOffsets[gridMethod];
-
-    auto gridOffset = graph.offset * graph.scale;
-
-    for (float x = fmodf(gridOffset.x, GRID_SZ*graph.scale);
+    auto gridOffset = viewxform* glm::vec3(0, 0, 1);
+    for (float x = fmodf(gridOffset.x-winPos.x, GRID_SZ*graph.scale);
          x < canvasSize.x; x += GRID_SZ * graph.scale)
-      draw_list->AddLine(ImVec2(x, 0.0f) + winPos,
+      draw_list->AddLine(ImVec2(x, 0) + winPos,
                          ImVec2(x, canvasSize.y) + winPos,
                          GRID_COLOR);
-    for (float y = fmodf(gridOffset.y, GRID_SZ*graph.scale);
+    for (float y = fmodf(gridOffset.y-winPos.y, GRID_SZ*graph.scale);
          y < canvasSize.y; y += GRID_SZ * graph.scale)
-      draw_list->AddLine(ImVec2(0.0f, y) + winPos,
+      draw_list->AddLine(ImVec2(0, y) + winPos,
                          ImVec2(canvasSize.x, y) + winPos,
                          GRID_COLOR);
   }
 
+  // Draw Nodes
   graph.initOrder();
   for (size_t i = 0; i < graph.nodeorder.size(); ++i) {
   }
 
-  draw_list->AddCircleFilled(viewxform * ImVec2(0, 0), 20*graph.scale,
-                             IM_COL32(200, 0, 0, 200));
+  // Draw Links
+
+  // Debug
+  //draw_list->AddCircleFilled(viewxform * ImVec2(0, 0), 20*graph.scale,
+  //                           IM_COL32(200, 0, 0, 200));
 
   if (ImGui::IsWindowHovered() && !ImGui::IsAnyItemActive()) {
     if(ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f)) {
