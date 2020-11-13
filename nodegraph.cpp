@@ -62,7 +62,7 @@ struct AABB {
 
 namespace editorui {
 
-void inspectNode(Node* node) {
+void updateInspectorView(Node* node) {
   if (!ImGui::Begin("Param Inspector", nullptr, ImGuiWindowFlags_MenuBar)) {
     ImGui::End();
     return;
@@ -384,7 +384,7 @@ void updateAndDraw(Graph& graph) {
   Node* toInspect = graph.nodeSelection.size()==1
                     ? &graph.nodes[*graph.nodeSelection.begin()]
                     : nullptr;
-  inspectNode(toInspect);
+  updateInspectorView(toInspect);
 }
 
 }  // namespace editorui
