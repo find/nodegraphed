@@ -31,6 +31,7 @@ void init()
   for (int i = 0; i < 20; ++i) {
     graph.nodes.emplace_back();
     graph.nodes.back().pos.y = i*80.f;
+    graph.nodes.back().numInputs = i/3;
   }
 }
 

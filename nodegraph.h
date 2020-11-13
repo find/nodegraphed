@@ -22,10 +22,33 @@ struct Node {
   } type = Type::NORMAL;
   std::string name = "";
   int numInputs = 1;
-  int numOutpus = 1;
+  int numOutputs = 1;
   glm::vec2 pos = {0, 0};
   glm::vec2 size = DEFAULT_NODE_SIZE;
   glm::vec4 color = DEFAULT_NODE_COLOR;
+
+  glm::vec2 inputPinPos(int i) const {
+    if (type==Type::NORMAL) {
+      return glm::vec2((size.x * 0.9f) * float(i+1) / (numInputs + 1) - size.x*0.45f, -size.y / 2.f) + pos;
+    } else {
+      return pos;
+    }
+  }
+  glm::vec2 outputPinPos(int i) const {
+    if (type == Type::NORMAL) {
+      return glm::vec2((size.x * 0.9f) * float(i+1) / (numOutputs + 1) - size.x*0.45f, size.y / 2.f) + pos;
+    } else {
+      return pos;
+    }
+  }
+
+  // TODO: next-gen API
+  // virtual std::vector<glm::vec2> getShape() const {
+  //   return{ {-32,12}, {32,12}, {32,-12}, {-32,-12} };
+  // }
+  // virtual bool hitTest(glm::vec2 const& pt) const {
+  //   return pt.x <= DEFAULT_NODE_SIZE.x / 2 && pt.x >= -DEFAULT_NODE_SIZE.x / 2 && pt.y <= DEFAULT_NODE_SIZE.y / 2 && pt.y >= -DEFAULT_NODE_SIZE.y / 2;
+  // }
 };
 
 struct Link {

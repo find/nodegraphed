@@ -42,6 +42,12 @@ struct AABB {
     max.x = std::max(max.x, aabb.max.x);
     max.y = std::max(max.y, aabb.max.y);
   }
+  void expand(float amount) {
+    min.x -= amount;
+    min.y -= amount;
+    max.x += amount;
+    max.y += amount;
+  }
   // test if the that is contained inside this
   bool contains(AABB const& that) const {
     return min.x <= that.min.x &&
@@ -71,7 +77,7 @@ void updateInspectorView(Node* node) {
   if (node) {
     ImGui::Text(node->name.c_str());
     ImGui::SliderInt("Number of Inputs", &node->numInputs, 0, 10);
-    ImGui::SliderInt("Number of Outputs", &node->numOutpus, 0, 10);
+    ImGui::SliderInt("Number of Outputs", &node->numOutputs, 0, 10);
     ImGui::ColorEdit4("Color", &node->color.r);
   } else {
     ImGui::Text("nothing selected");
@@ -137,6 +143,8 @@ void drawGraph(Graph const& graph, size_t hoveredNode, std::set<size_t> const& u
   }
 
   // Nodes
+  auto visibilityClipingArea = canvasArea;
+  visibilityClipingArea.expand(8 * graph.scale);
   for (size_t i = 0; i < graph.nodeOrder.size(); ++i) {
     size_t const idx = graph.nodeOrder[i];
     auto const& node = graph.nodes[idx];
@@ -146,15 +154,30 @@ void drawGraph(Graph const& graph, size_t hoveredNode, std::set<size_t> const& u
     ImVec2 const bottomright = {center.x + node.size.x / 2.f * graph.scale,
                                 center.y + node.size.y / 2.f * graph.scale};
 
+    if (!visibilityClipingArea.intersects(AABB(topleft, bottomright)))
+      continue;
+
     ImU32 const color =
         unconfirmedNodeSelection.find(idx) != unconfirmedNodeSelection.end()
             ? SELECTING_NODE_COLOR
             : hoveredNode == idx ? HOVER_NODE_COLOR : DEFAULT_NODE_COLOR;
-    drawList->AddRectFilled(topleft, bottomright, color, 6.f * graph.scale);
 
-    if (graph.nodeSelection.find(idx) != graph.nodeSelection.end())
-      drawList->AddRect(topleft, bottomright, IM_COL32(255, 255, 255, 255),
-                        6.f * graph.scale);
+    if (node.type == Node::Type::NORMAL) {
+      drawList->AddRectFilled(topleft, bottomright, color, 6.f * graph.scale);
+
+      if (graph.nodeSelection.find(idx) != graph.nodeSelection.end())
+        drawList->AddRect(topleft, bottomright, IM_COL32(255, 255, 255, 255),
+          6.f * graph.scale);
+
+      for (int i = 0; i < node.numInputs; ++i) {
+        drawList->AddCircleFilled(toCanvas*toImVec(node.inputPinPos(i)-glm::vec2(0,3)), 4*graph.scale, color);
+      }
+      for (int i = 0; i < node.numOutputs; ++i) {
+        drawList->AddCircleFilled(toCanvas*toImVec(node.outputPinPos(i)+glm::vec2(0,3)), 4*graph.scale, color);
+      }
+    } else if (node.type == Node::Type::ANCHOR) {
+      drawList->AddCircleFilled(toImVec(center), 8, color);
+    }
   }
 
   // Pending node
