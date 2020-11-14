@@ -295,7 +295,6 @@ void updateNetworkView(GraphView& gv, char const* name) {
   glm::mat3 const toCanvas = calcLocalToCanvasMatrix();
   glm::mat3 const toLocal = glm::inverse(toCanvas);
 
-  gv.graph->initOrder();
   size_t hoveredNode = -1;
   size_t clickedNode = -1;
   std::set<size_t> unconfirmedNodeSelection = gv.nodeSelection;

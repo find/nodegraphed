@@ -113,7 +113,7 @@ public:
   size_t addNode(Node const& node) {
     size_t id = NodeIdAllocator::instance().newId();
     nodes_.insert({ id, node });
-    initOrder();
+    nodeOrder_.push_back(id);
     return id;
   }
 
@@ -162,26 +162,7 @@ public:
       view->onGraphChanged();
   }
 
-  void initOrder() {
-    size_t oldsize = nodeOrder_.size();
-    if (oldsize < nodes_.size()) {
-      std::set<size_t> unsorted;
-      for (auto const& node : nodes_)
-        unsorted.insert(node.first);
-      for (auto id : nodeOrder_)
-        unsorted.erase(id);
-
-      assert(nodes_.size() == oldsize + unsorted.size());
-      nodeOrder_.resize(nodes_.size());
-      for (auto itr = unsorted.begin(); oldsize < nodes_.size(); ++oldsize) {
-        nodeOrder_[oldsize] = *itr;
-        ++itr;
-      }
-    }
-  }
-
   void shiftToEnd(size_t nodeid) {
-    initOrder();
     size_t idx = 0;
     for (; idx < nodeOrder_.size(); ++idx)
       if (nodeOrder_[idx] == nodeid) break;
