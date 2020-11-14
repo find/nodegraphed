@@ -84,9 +84,10 @@ struct GraphView {
     BOX_SELECTING,
     BOX_DESELECTING,
     PLACING_NEW_NODE,
-    DRAGING_LINK_HEAD,
-    DRAGING_LINK_BODY,
-    DRAGING_LINK_TAIL,
+    DRAGGING_NODES,
+    DRAGGING_LINK_HEAD,
+    DRAGGING_LINK_BODY,
+    DRAGGING_LINK_TAIL,
   } uiState = UIState::VIEWING;
   glm::vec2 selectionBoxStart = { 0, 0 };
   glm::vec2 selectionBoxEnd = { 0, 0 };

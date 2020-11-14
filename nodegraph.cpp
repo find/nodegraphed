@@ -331,94 +331,77 @@ void updateNetworkView(GraphView& gv, char const* name) {
      ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
     gv.isActiveView = mouseInsideCanvas;
   }
-
-  if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-    clickedNode = hoveredNode;
-    gv.activeNode = clickedNode;
-    if (clickedNode != -1 &&
-        (glm::distance(gv.selectionBoxStart, gv.selectionBoxEnd) < 4 ||
-         gv.nodeSelection.empty())) {
-      gv.nodeSelection.insert(clickedNode);
-      graph.shiftToEnd(clickedNode);
-    }
-
-    auto const modkey = ImGui::GetIO().KeyMods;
-    if (gv.uiState == GraphView::UIState::VIEWING && mouseInsideCanvas) {
-      gv.selectionBoxStart = glm::vec2(mousePos.x, mousePos.y);
-      if (modkey & (ImGuiKeyModFlags_Shift | (~ImGuiKeyModFlags_Ctrl))) {
-        gv.uiState = GraphView::UIState::BOX_SELECTING;
-      } else if (modkey & (ImGuiKeyModFlags_Ctrl | (~ImGuiKeyModFlags_Shift))) {
-        gv.uiState = GraphView::UIState::BOX_DESELECTING;
+  if (mouseInsideCanvas) {
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+      clickedNode = hoveredNode;
+      gv.activeNode = clickedNode;
+      if (clickedNode != -1) {
+        gv.uiState = GraphView::UIState::DRAGGING_NODES;
+        if (glm::distance(gv.selectionBoxStart, gv.selectionBoxEnd) < 4 ||
+          gv.nodeSelection.empty()) {
+          gv.nodeSelection.insert(clickedNode);
+          graph.shiftToEnd(clickedNode);
+        }
       }
 
-      if (gv.uiState == GraphView::UIState::BOX_SELECTING) {
-        if (clickedNode != -1) gv.nodeSelection.insert(clickedNode);
-      } else if (gv.uiState == GraphView::UIState::BOX_DESELECTING) {
-        if (clickedNode != -1) gv.nodeSelection.erase(clickedNode);
+      auto const modkey = ImGui::GetIO().KeyMods;
+      if (gv.uiState == GraphView::UIState::VIEWING) {
+        gv.selectionBoxStart = glm::vec2(mousePos.x, mousePos.y);
+        if (modkey & (ImGuiKeyModFlags_Shift | (~ImGuiKeyModFlags_Ctrl))) {
+          gv.uiState = GraphView::UIState::BOX_SELECTING;
+        } else if (modkey & (ImGuiKeyModFlags_Ctrl | (~ImGuiKeyModFlags_Shift))) {
+          gv.uiState = GraphView::UIState::BOX_DESELECTING;
+        }
+
+        if (gv.uiState == GraphView::UIState::BOX_SELECTING) {
+          if (clickedNode != -1) gv.nodeSelection.insert(clickedNode);
+        } else if (gv.uiState == GraphView::UIState::BOX_DESELECTING) {
+          if (clickedNode != -1) gv.nodeSelection.erase(clickedNode);
+        }
       }
     }
-  }
-  if (gv.uiState == GraphView::UIState::VIEWING && mouseInsideCanvas &&
-      ImGui::IsMouseDragging(ImGuiMouseButton_Left, 10)) {
-    if (hoveredNode == -1 && clickedNode == -1 && gv.activeNode == -1 && gv.isActiveView) {
-      gv.uiState = GraphView::UIState::BOX_SELECTING;
-      gv.nodeSelection.clear();
-    } else if (gv.activeNode != -1 &&
-               gv.nodeSelection.find(gv.activeNode) != gv.nodeSelection.end()) {
-      auto const srcDelta =
-          glm::xy(toLocal * glm::vec3(mouseDelta.x, mouseDelta.y, 0.0));
-      if (glm::length(srcDelta) > 0) {
-        for (size_t idx : gv.nodeSelection)
-          graph.noderef(idx).pos += srcDelta;
-      }
-    }
-  }
-  if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
-    if (gv.uiState == GraphView::UIState::BOX_SELECTING ||
+    if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+      if (gv.uiState == GraphView::UIState::BOX_SELECTING ||
         gv.uiState == GraphView::UIState::BOX_DESELECTING) {
-      gv.nodeSelection = unconfirmedNodeSelection;
-      gv.uiState = GraphView::UIState::VIEWING;
-    } else if (gv.uiState == GraphView::UIState::VIEWING && mouseInsideCanvas) {
-      if (hoveredNode == -1 && clickedNode == -1 && gv.activeNode == -1) {
-        gv.nodeSelection.clear();
-      } else if (gv.activeNode != -1 &&
-                 glm::distance(gv.selectionBoxStart, gv.selectionBoxEnd) <
-                     4) {
-        gv.nodeSelection = { gv.activeNode };
+        gv.nodeSelection = unconfirmedNodeSelection;
+      } else if (gv.uiState == GraphView::UIState::VIEWING) {
+        if (hoveredNode == -1 && clickedNode == -1 && gv.activeNode == -1) {
+          gv.nodeSelection.clear();
+        } else if (gv.activeNode != -1 &&
+          glm::distance(gv.selectionBoxStart, gv.selectionBoxEnd) < 4) {
+          gv.nodeSelection = { gv.activeNode };
+        }
+      } else if (gv.uiState == GraphView::UIState::PLACING_NEW_NODE) {
+        auto pos = toLocal * mousePos;
+        Node newnode;
+        newnode.pos = glm::vec2(pos.x, pos.y);
+        size_t idx = graph.addNode(newnode);
+        gv.activeNode = idx;
+        gv.nodeSelection = { idx };
+        gv.onGraphChanged();
       }
-    } else if (gv.uiState == GraphView::UIState::PLACING_NEW_NODE) {
-      auto pos = toLocal * mousePos;
-      Node newnode;
-      newnode.pos = glm::vec2(pos.x, pos.y);
-      size_t idx = graph.addNode(newnode);
       gv.uiState = GraphView::UIState::VIEWING;
-      gv.activeNode = idx;
-      gv.nodeSelection = {idx};
-      gv.onGraphChanged();
     }
-  }
 
-  // Scaling
-  if (ImGui::IsWindowHovered()) {
+    // Scaling
     if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f)) {
       auto const srcDelta =
-          glm::xy(toLocal * glm::vec3(mouseDelta.x, mouseDelta.y, 0.0));
+        glm::xy(toLocal * glm::vec3(mouseDelta.x, mouseDelta.y, 0.0));
       gv.canvasOffset += srcDelta;
     }
     if (abs(ImGui::GetIO().MouseWheel) > 0.1) {
       gv.canvasScale = glm::clamp(
-          gv.canvasScale + ImGui::GetIO().MouseWheel / 20.f, 0.1f, 10.f);
+        gv.canvasScale + ImGui::GetIO().MouseWheel / 20.f, 0.1f, 10.f);
       // cursor as scale center:
       glm::mat3 newXform = calcLocalToCanvasMatrix();
       auto const cc = mousePos;
       auto const ccInOldLocal = toLocal * cc;
       auto const ccInNewLocal = glm::inverse(newXform) * cc;
       gv.canvasOffset += glm::vec2(ccInNewLocal.x - ccInOldLocal.x,
-                                   ccInNewLocal.y - ccInOldLocal.y);
+        ccInNewLocal.y - ccInOldLocal.y);
     }
-  }
-  // Handle Keydown
-  if (gv.isActiveView) {
+
+    // Handle Keydown
     if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Delete))) {
       spdlog::debug("removing nodes [{}] from view {}", fmt::join(gv.nodeSelection, ", "), name);
       graph.removeNodes(gv.nodeSelection);
@@ -433,6 +416,24 @@ void updateNetworkView(GraphView& gv, char const* name) {
       gv.uiState == GraphView::UIState::PLACING_NEW_NODE) {
       gv.uiState = GraphView::UIState::VIEWING;
     }
+  } // Mouse inside canvas?
+
+  // Dragging can go beyond canvas
+  if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 10)) {
+    if (gv.uiState == GraphView::UIState::VIEWING && gv.isActiveView && mouseInsideCanvas) {
+      gv.uiState = GraphView::UIState::BOX_SELECTING;
+      gv.nodeSelection.clear();
+    } else if (gv.uiState == GraphView::UIState::DRAGGING_NODES) {
+      auto const srcDelta =
+        glm::xy(toLocal * glm::vec3(mouseDelta.x, mouseDelta.y, 0.0));
+      if (glm::length(srcDelta) > 0) {
+        for (size_t idx : gv.nodeSelection)
+          graph.noderef(idx).pos += srcDelta;
+      }
+    }
+  }
+  if (!mouseInsideCanvas && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+    gv.uiState = GraphView::UIState::VIEWING;
   }
 
   drawGraph(gv, hoveredNode, unconfirmedNodeSelection);
