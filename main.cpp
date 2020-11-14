@@ -16,6 +16,8 @@
 namespace app {
 
 editorui::Graph graph;
+editorui::GraphView view;
+editorui::GraphView view2;
 
 void init()
 {
@@ -29,10 +31,19 @@ void init()
   ImGui::StyleColorsDark();
 
   for (int i = 0; i < 20; ++i) {
-    graph.nodes.emplace_back();
-    graph.nodes.back().pos.y = i*80.f;
-    graph.nodes.back().numInputs = i/3;
+    auto node = editorui::Node{};
+    node.pos.y = i*80.f;
+    node.numInputs = i/3;
+    graph.addNode(node);
   }
+  view.graph = &graph;
+  view.onGraphChanged();
+
+  view2.graph = &graph;
+  view2.onGraphChanged();
+
+  graph.addViewer(&view);
+  graph.addViewer(&view2);
 }
 
 bool show_demo_window = true;
@@ -42,7 +53,8 @@ float clear_color[3] = { 0.1f,0.1f,0.1f };
 
 void update() {
   ImGui::DockSpaceOverViewport();
-  editorui::updateAndDraw(graph);
+  editorui::updateAndDraw(view, "Node Graph");
+  editorui::updateAndDraw(view2, "Node Graph2");
 }
 
 void quit() {}

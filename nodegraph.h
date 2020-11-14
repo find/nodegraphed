@@ -2,14 +2,26 @@
 #include <cstdint>
 #include <glm/glm.hpp>
 #include <set>
+#include <map>
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <memory>
 
 namespace editorui {
 
 static constexpr glm::vec2 DEFAULT_NODE_SIZE = {64, 24};
 static constexpr glm::vec4 DEFAULT_NODE_COLOR = {0.6f, 0.6f, 0.6f, 0.7f};
+
+class NodeIdAllocator {
+  static NodeIdAllocator* instance_;
+  size_t nextId_=0;
+
+public:
+  static NodeIdAllocator& instance();
+  void   setInitialId(size_t id) { nextId_ = id; }
+  size_t newId() { return ++nextId_; }
+};
 
 struct Node {
   enum class Type : uint32_t {
@@ -58,15 +70,14 @@ struct Link {
   int endPin;
 };
 
-struct Graph {
-  std::vector<Node> nodes;
-  std::vector<size_t> nodeOrder;
-  std::vector<Link> links;
+class Graph;
 
-  bool canvasShowGrid = true;
-  glm::vec2 canvasOffset = {0, 0};
-  float scale = 1;
-  size_t activeNode = -1;
+struct GraphView {
+  glm::vec2 canvasOffset = { 0,0 };
+  float     canvasScale = 1;
+  bool      drawGrid = true;
+  bool      isActiveView = false;
+  size_t    activeNode = -1;
   std::set<size_t> nodeSelection;
   enum class UIState : uint8_t {
     VIEWING,
@@ -77,98 +88,112 @@ struct Graph {
     DRAGING_LINK_BODY,
     DRAGING_LINK_TAIL,
   } uiState = UIState::VIEWING;
-  glm::vec2 selectionBoxStart = {0, 0};
-  glm::vec2 selectionBoxEnd = {0, 0};
+  glm::vec2 selectionBoxStart = { 0, 0 };
+  glm::vec2 selectionBoxEnd = { 0, 0 };
+
+  Graph* graph = nullptr;
+
+  void onGraphChanged(); // callback when graph has changed
+};
+
+class Graph {
+protected:
+  std::unordered_map<size_t, Node> nodes_;
+  std::vector<Link> links_;
+  std::vector<size_t> nodeOrder_;
+  std::set<GraphView*> viewers_;
+
+public:
+
+  auto const& nodes() const { return nodes_; }
+  auto const& links() const { return links_; }
+  auto const& order() const { return nodeOrder_; }
+  auto const& viewers() const { return viewers_; }
 
   size_t addNode(Node const& node) {
-    nodes.push_back(node);
+    size_t id = NodeIdAllocator::instance().newId();
+    nodes_.insert({ id, node });
     initOrder();
-    return nodes.size() - 1;
+    return id;
+  }
+
+  Node& noderef(size_t idx) {
+    return nodes_.at(idx);
+  }
+
+  void addViewer(GraphView* view) {
+    if (view)
+      viewers_.insert(view);
+  }
+
+  void removeViewer(GraphView* view) {
+    if (view)
+      viewers_.erase(view);
   }
 
   void removeNode(size_t idx) {
-    nodes.erase(nodes.begin() + idx);
-    auto itr = std::find(nodeOrder.begin(), nodeOrder.end(), idx);
-    nodeOrder.erase(itr);
-    for (auto& i : nodeOrder) {
-      if (i > idx) --i;
-    }
-    for (auto itr = links.begin(); itr != links.end(); ++itr) {
+    nodes_.erase(idx);
+    auto itr = std::find(nodeOrder_.begin(), nodeOrder_.end(), idx);
+    nodeOrder_.erase(itr);
+    for (auto itr = links_.begin(); itr != links_.end(); ++itr) {
       auto& link = *itr;
       if (link.startNode == idx || link.endNode == idx) {
-        itr = links.erase(itr);
-      } else {
-        if (link.startNode > idx) --link.startNode;
-        if (link.endNode > idx) --link.endNode;
+        itr = links_.erase(itr);
       }
     }
-    if (activeNode == idx)
-      activeNode = -1;
-    else if (activeNode > idx)
-      activeNode -= 1;
+    for (auto* view : viewers_)
+      view->onGraphChanged();
   }
 
   template <class Container>
   void removeNodes(Container const& indices) {
-    std::vector<size_t> idxMap(nodes.size()), reverseIdxMap(nodes.size());
-    for (size_t i = 0; i < nodes.size(); ++i) reverseIdxMap[i] = idxMap[i] = i;
-    for (size_t idx : indices) idxMap[idx] = -1;
-    size_t to = 0;
-    for (size_t from = 0; from < idxMap.size(); ++from) {
-      if (idxMap[from] != -1) {
-        idxMap[to] = idxMap[from];
-        nodes[to] = std::move(nodes[from]);
-        reverseIdxMap[from] = to;
-        ++to;
-      } else {
-        reverseIdxMap[from] = -1;
-      }
-    }
-    nodes.resize(to);
-
-    // TODO: slow here
     for (auto idx : indices) {
-      auto itr = std::find(nodeOrder.begin(), nodeOrder.end(), idx);
-      nodeOrder.erase(itr);
-      for (auto itr = links.begin(); itr != links.end(); ++itr) {
+      nodes_.erase(idx);
+      auto itr = std::find(nodeOrder_.begin(), nodeOrder_.end(), idx);
+      nodeOrder_.erase(itr);
+      for (auto itr = links_.begin(); itr != links_.end(); ++itr) {
         auto& link = *itr;
         if (link.startNode == idx || link.endNode == idx) {
-          itr = links.erase(itr);
+          itr = links_.erase(itr);
         }
       }
     }
-    for (auto& link : links) {
-      link.startNode = reverseIdxMap[link.startNode];
-      link.endNode = reverseIdxMap[link.endNode];
-    }
-    for (auto& i : nodeOrder) {
-      i = reverseIdxMap[i];
-    }
-    if (activeNode != -1) activeNode = reverseIdxMap[activeNode];
+    for (auto* view : viewers_)
+      view->onGraphChanged();
   }
 
   void initOrder() {
-    size_t oldsize = nodeOrder.size();
-    if (oldsize < nodes.size()) {
-      nodeOrder.resize(nodes.size());
-      for (; oldsize < nodes.size(); ++oldsize) nodeOrder[oldsize] = oldsize;
+    size_t oldsize = nodeOrder_.size();
+    if (oldsize < nodes_.size()) {
+      std::set<size_t> unsorted;
+      for (auto const& node : nodes_)
+        unsorted.insert(node.first);
+      for (auto id : nodeOrder_)
+        unsorted.erase(id);
+
+      assert(nodes_.size() == oldsize + unsorted.size());
+      nodeOrder_.resize(nodes_.size());
+      for (auto itr = unsorted.begin(); oldsize < nodes_.size(); ++oldsize) {
+        nodeOrder_[oldsize] = *itr;
+        ++itr;
+      }
     }
   }
 
   void shiftToEnd(size_t nodeid) {
     initOrder();
     size_t idx = 0;
-    for (; idx < nodeOrder.size(); ++idx)
-      if (nodeOrder[idx] == nodeid) break;
-    if (idx < nodeOrder.size()) {
-      for (size_t i = idx + 1; i < nodeOrder.size(); ++i) {
-        nodeOrder[i - 1] = nodeOrder[i];
+    for (; idx < nodeOrder_.size(); ++idx)
+      if (nodeOrder_[idx] == nodeid) break;
+    if (idx < nodeOrder_.size()) {
+      for (size_t i = idx + 1; i < nodeOrder_.size(); ++i) {
+        nodeOrder_[i - 1] = nodeOrder_[i];
       }
-      nodeOrder.back() = nodeid;
+      nodeOrder_.back() = nodeid;
     }
   }
 };
 
-void updateAndDraw(Graph& graph);
+void updateAndDraw(GraphView& graph, char const* name);
 
 }  // namespace editorui
