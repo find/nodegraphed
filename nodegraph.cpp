@@ -336,11 +336,10 @@ void updateNetworkView(GraphView& gv, char const* name) {
       clickedNode = hoveredNode;
       gv.activeNode = clickedNode;
       if (clickedNode != -1) {
+        graph.shiftToEnd(clickedNode);
         gv.uiState = GraphView::UIState::DRAGGING_NODES;
-        if (glm::distance(gv.selectionBoxStart, gv.selectionBoxEnd) < 4 ||
-          gv.nodeSelection.empty()) {
-          gv.nodeSelection.insert(clickedNode);
-          graph.shiftToEnd(clickedNode);
+        if (gv.nodeSelection.find(clickedNode)==gv.nodeSelection.end()) {
+          gv.nodeSelection = { clickedNode };
         }
       }
 
