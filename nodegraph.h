@@ -41,14 +41,14 @@ struct Node {
 
   glm::vec2 inputPinPos(int i) const {
     if (type==Type::NORMAL) {
-      return glm::vec2((size.x * 0.9f) * float(i+1) / (numInputs + 1) - size.x*0.45f, -size.y / 2.f) + pos;
+      return glm::vec2((size.x * 0.9f) * float(i+1) / (numInputs + 1) - size.x*0.45f, -size.y / 2.f - 4) + pos;
     } else {
       return pos;
     }
   }
   glm::vec2 outputPinPos(int i) const {
     if (type == Type::NORMAL) {
-      return glm::vec2((size.x * 0.9f) * float(i+1) / (numOutputs + 1) - size.x*0.45f, size.y / 2.f) + pos;
+      return glm::vec2((size.x * 0.9f) * float(i+1) / (numOutputs + 1) - size.x*0.45f, size.y / 2.f + 4) + pos;
     } else {
       return pos;
     }
@@ -64,10 +64,10 @@ struct Node {
 };
 
 struct Link {
-  size_t startNode;
-  int startPin;
-  size_t endNode;
-  int endPin;
+  size_t srcNode;
+  int srcPin;
+  size_t dstNode;
+  int dstPin;
 };
 
 class Graph;
@@ -91,6 +91,8 @@ struct GraphView {
   } uiState = UIState::VIEWING;
   glm::vec2 selectionBoxStart = { 0, 0 };
   glm::vec2 selectionBoxEnd = { 0, 0 };
+  Link      pendingLink = { size_t(-1),-1,size_t(-1),-1 };
+  glm::vec2 pendingLinkPos;
 
   Graph* graph = nullptr;
 
@@ -132,18 +134,28 @@ public:
       viewers_.erase(view);
   }
 
+  void notifyViewers() {
+    for (auto* v : viewers_)
+      v->onGraphChanged();
+  }
+
+  void addLink(size_t srcnode, int srcpin, size_t dstnode, int dstpin) { 
+    if (nodes_.find(srcnode) != nodes_.end() && nodes_.find(dstnode) != nodes_.end()) {
+      links_.push_back(Link{ srcnode, srcpin, dstnode, dstpin });
+    }
+  }
+
   void removeNode(size_t idx) {
     nodes_.erase(idx);
     auto itr = std::find(nodeOrder_.begin(), nodeOrder_.end(), idx);
     nodeOrder_.erase(itr);
     for (auto itr = links_.begin(); itr != links_.end(); ++itr) {
       auto& link = *itr;
-      if (link.startNode == idx || link.endNode == idx) {
+      if (link.srcNode == idx || link.dstNode == idx) {
         itr = links_.erase(itr);
       }
     }
-    for (auto* view : viewers_)
-      view->onGraphChanged();
+    notifyViewers();
   }
 
   template <class Container>
@@ -154,13 +166,12 @@ public:
       nodeOrder_.erase(itr);
       for (auto itr = links_.begin(); itr != links_.end(); ++itr) {
         auto& link = *itr;
-        if (link.startNode == idx || link.endNode == idx) {
+        if (link.srcNode == idx || link.dstNode == idx) {
           itr = links_.erase(itr);
         }
       }
     }
-    for (auto* view : viewers_)
-      view->onGraphChanged();
+    notifyViewers();
   }
 
   void shiftToEnd(size_t nodeid) {
