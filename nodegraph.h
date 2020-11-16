@@ -5,13 +5,14 @@
 #include <map>
 #include <string>
 #include <unordered_map>
+#include <algorithm>
 #include <vector>
 #include <memory>
 
 namespace editorui {
 
 static constexpr glm::vec2 DEFAULT_NODE_SIZE = {64, 24};
-static constexpr glm::vec4 DEFAULT_NODE_COLOR = {0.6f, 0.6f, 0.6f, 0.7f};
+static constexpr glm::vec4 DEFAULT_NODE_COLOR = {0.6f, 0.6f, 0.6f, 0.8f};
 
 class NodeIdAllocator {
   static NodeIdAllocator* instance_;
@@ -142,18 +143,16 @@ public:
     if (nodes_.find(srcnode) != nodes_.end() && nodes_.find(dstnode) != nodes_.end()) {
       links_.push_back(Link{ srcnode, srcpin, dstnode, dstpin });
     }
+    notifyViewers();
   }
 
   void removeNode(size_t idx) {
     nodes_.erase(idx);
     auto itr = std::find(nodeOrder_.begin(), nodeOrder_.end(), idx);
     nodeOrder_.erase(itr);
-    for (auto itr = links_.begin(); itr != links_.end(); ++itr) {
-      auto& link = *itr;
-      if (link.srcNode == idx || link.dstNode == idx) {
-        itr = links_.erase(itr);
-      }
-    }
+    links_.erase(std::remove_if(links_.begin(), links_.end(), [idx](Link const& link) {
+      return (link.srcNode == idx || link.dstNode == idx);
+    }), links_.end());
     notifyViewers();
   }
 
@@ -163,12 +162,12 @@ public:
       nodes_.erase(idx);
       auto itr = std::find(nodeOrder_.begin(), nodeOrder_.end(), idx);
       nodeOrder_.erase(itr);
-      for (auto itr = links_.begin(); itr != links_.end(); ++itr) {
-        auto& link = *itr;
-        if (link.srcNode == idx || link.dstNode == idx) {
-          itr = links_.erase(itr);
-        }
-      }
+      links_.erase(
+          std::remove_if(links_.begin(), links_.end(),
+                         [idx](Link const& link) {
+                           return (link.srcNode == idx || link.dstNode == idx);
+                         }),
+          links_.end());
     }
     notifyViewers();
   }
