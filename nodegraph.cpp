@@ -139,7 +139,7 @@ static void drawLink(ImDrawList* drawList, ImVec2 const& start, ImVec2 const& en
       ImVec2(end.x, glm::mix(start.y, end.y, 0.75)),
       end
   };
-  drawList->AddPolyline(pts, 4, IM_COL32(100, 100, 100, 200), false, 2.0f);
+  drawList->AddPolyline(pts, 4, color, false, thickness);
 }
 
 void drawGraph(GraphView const& gv, size_t hoveredNode,
@@ -258,7 +258,9 @@ void drawGraph(GraphView const& gv, size_t hoveredNode,
         toCanvas *
             imvec(gv.graph->noderef(link.srcNode).outputPinPos(link.srcPin)),
         toCanvas *
-            imvec(gv.graph->noderef(link.dstNode).inputPinPos(link.dstPin)));
+            imvec(gv.graph->noderef(link.dstNode).inputPinPos(link.dstPin)),
+        imcolor(highlight(gv.graph->noderef(link.srcNode).color, 0, 0.2f, 1.0f))
+      );
   }
 
   // Pending Links ...
