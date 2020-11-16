@@ -88,11 +88,13 @@ struct GraphView {
     DRAGGING_LINK_HEAD,
     DRAGGING_LINK_BODY,
     DRAGGING_LINK_TAIL,
+    CUTING_LINK,
   } uiState = UIState::VIEWING;
   glm::vec2 selectionBoxStart = { 0, 0 };
   glm::vec2 selectionBoxEnd = { 0, 0 };
   Link      pendingLink = { size_t(-1),-1,size_t(-1),-1 };
   glm::vec2 pendingLinkPos;
+  std::vector<glm::vec2> linkCuttingStroke;
 
   Graph* graph = nullptr;
 
@@ -153,6 +155,16 @@ public:
           return link.dstNode == dstnode && link.dstPin == dstpin;
         });
     if (itr != links_.end()) links_.erase(itr);
+  }
+
+  size_t upstreamNodeOf(size_t nodeidx, int pin) {
+    auto itr = std::find_if(links_.begin(), links_.end(), [nodeidx, pin](Link const& link) {
+      return link.dstNode == nodeidx && link.dstPin == pin;
+    });
+    if (itr == links_.end())
+      return -1;
+    else
+      return itr->srcNode;
   }
 
   void removeNode(size_t idx) {

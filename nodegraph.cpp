@@ -23,6 +23,10 @@ static inline ImVec2 operator*(const glm::mat3& m, const ImVec2& v) {
   auto r = m * glm::vec3(v.x, v.y, 1.0f);
   return ImVec2(r.x, r.y);
 }
+static inline bool ccw(const ImVec2& a, const ImVec2& b, const ImVec2& c) {
+  auto const ab = b - a, ac = c - a;
+  return glm::cross(glm::vec3(ab.x, ab.y, 0.f), glm::vec3(ac.x, ac.y, 0.f)).z > 0;
+}
 static inline float length(const ImVec2& v) {
   return sqrt(v.x * v.x + v.y * v.y);
 }
@@ -85,6 +89,43 @@ struct AABB {
              that.max.y < min.y);
   }
 };
+static void genLinkPath(std::vector<ImVec2> &buffer, ImVec2 const& start, ImVec2 const& end, ImVec2 const& angledSegmentLengthRange) {
+  // TODO: make this prettier
+  /*
+  buffer.clear();
+  float const xcenter = (start.x + end.x) * 0.5f;
+  float const ycenter = (start.y + end.y) * 0.5f;
+  float const minAngledLength = angledSegmentLengthRange.x;
+  float const maxAngledLength = angledSegmentLengthRange.y;
+  */
+  buffer = { start, ImVec2(start.x, glm::mix(start.y, end.y, 0.33f)),
+             ImVec2(end.x, glm::mix(start.y, end.y, 0.67f)), end };
+}
+static void drawLink(ImDrawList* drawList, ImVec2 const& start,
+                     ImVec2 const& end,
+                     ImU32 color = IM_COL32(200, 200, 200, 200),
+                     float thickness = 1.0f) {
+  static std::vector<ImVec2> buff;
+  genLinkPath(buff, start, end, { 10, 100 });
+  drawList->AddPolyline(buff.data(), 4, color, false, thickness);
+}
+static bool strokeIntersects(std::vector<ImVec2> const& a, std::vector<ImVec2> const& b) {
+  // TODO: implement sweep line algorithm
+  for (size_t i = 1; i < a.size(); ++i) {
+    for (size_t j = 1; j < b.size(); ++j) {
+      if (AABB(a[i - 1], a[i]).intersects(AABB(b[j - 1], b[j]))) {
+        if (ccw(a[i - 1], b[j - 1], b[j]) == ccw(a[i], b[j - 1], b[j]))
+          continue;
+        else if (ccw(a[i - 1], a[i], b[j - 1]) == ccw(a[i - 1], a[i], b[j]))
+          continue;
+        else
+          return true;
+      }
+    }
+  }
+  return false;
+}
+
 
 namespace editorui {
 
@@ -129,23 +170,6 @@ void updateInspectorView(Node* node, char const* name) {
   }
 
   ImGui::End();
-}
-
-static void genLinkPath(std::vector<ImVec2> &buffer, ImVec2 const& start, ImVec2 const& end, ImVec2 const& angledSegmentLengthRange) {
-  buffer.clear();
-  float const xcenter = (start.x + end.x) * 0.5f;
-  float const ycenter = (start.y + end.y) * 0.5f;
-  float const minAngledLength = angledSegmentLengthRange.x;
-  float const maxAngledLength = angledSegmentLengthRange.y;
-
-}
-static void drawLink(ImDrawList* drawList, ImVec2 const& start,
-                     ImVec2 const& end,
-                     ImU32 color = IM_COL32(200, 200, 200, 200),
-                     float thickness = 1.0f) {
-  ImVec2 const pts[] = {start, ImVec2(start.x, glm::mix(start.y, end.y, 0.33f)),
-                        ImVec2(end.x, glm::mix(start.y, end.y, 0.67f)), end};
-  drawList->AddPolyline(pts, 4, color, false, thickness);
 }
 
 void drawGraph(GraphView const& gv, size_t hoveredNode,
@@ -233,8 +257,13 @@ void drawGraph(GraphView const& gv, size_t hoveredNode,
             cornerRounding(8.f * canvasScale));
 
       for (int i = 0; i < node.numInputs; ++i) {
+        size_t upnode = gv.graph->upstreamNodeOf(idx, i);
+        ImU32 pincolor = color;
+        if (upnode != -1) {
+          pincolor = imcolor(gv.graph->noderef(upnode).color);
+        }
         drawList->AddCircleFilled(toCanvas * imvec(node.inputPinPos(i)),
-                                  4 * canvasScale, color);
+                                  4 * canvasScale, pincolor);
       }
       for (int i = 0; i < node.numOutputs; ++i) {
         drawList->AddCircleFilled(toCanvas * imvec(node.outputPinPos(i)),
@@ -286,6 +315,14 @@ void drawGraph(GraphView const& gv, size_t hoveredNode,
   }
   if (hasPendingLink) {
     drawLink(drawList, curveStart, curveEnd);
+  }
+
+  // Link cutting stroke
+  if (gv.uiState == GraphView::UIState::CUTING_LINK) {
+    std::vector<ImVec2> stroke(gv.linkCuttingStroke.size());
+    for (size_t i = 0; i < gv.linkCuttingStroke.size(); ++i)
+      stroke[i] = imvec(toCanvas * glm::vec3(gv.linkCuttingStroke[i],1.0f));
+    drawList->AddPolyline(stroke.data(), stroke.size(), IM_COL32(255, 0, 0, 233), false, 2);
   }
 }
 
@@ -528,19 +565,52 @@ void updateNetworkView(GraphView& gv, char const* name) {
         mouseInsideCanvas) {
       gv.uiState = GraphView::UIState::BOX_SELECTING;
       gv.nodeSelection.clear();
-    } else if (gv.uiState == GraphView::UIState::DRAGGING_NODES) {
+    } else if (gv.uiState == GraphView::UIState::DRAGGING_NODES) { // drag nodes
       auto const srcDelta =
           glm::xy(toLocal * glm::vec3(mouseDelta.x, mouseDelta.y, 0.0));
       if (glm::length(srcDelta) > 0) {
         for (size_t idx : gv.nodeSelection) graph.noderef(idx).pos += srcDelta;
       }
+    } else if (ImGui::IsKeyDown(ImGui::GetKeyIndex(ImGuiKey_Y))) { // cut links
+      gv.uiState = GraphView::UIState::CUTING_LINK;
+      auto mp = toLocal * mousePos;
+      gv.linkCuttingStroke.push_back(glm::vec2(mp.x, mp.y));
     }
   }
   if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+    // confirm node selection
     if (gv.uiState == GraphView::UIState::BOX_SELECTING ||
         gv.uiState == GraphView::UIState::BOX_DESELECTING) {
       if (!ImGui::IsWindowHovered() || !mouseInsideCanvas)
         gv.nodeSelection = unconfirmedNodeSelection;
+    }
+    // confirm link cutting
+    if (!gv.linkCuttingStroke.empty()) {
+      std::vector<ImVec2> cutStroke(gv.linkCuttingStroke.size());
+      cutStroke[0] = imvec(gv.linkCuttingStroke.front());
+      AABB cutterbox(cutStroke[0]);
+      for (size_t i = 1; i < gv.linkCuttingStroke.size(); ++i) {
+        auto const& pos = imvec(gv.linkCuttingStroke[i]);
+        cutterbox.merge(pos);
+        cutStroke[i] = pos;
+      }
+      cutterbox.expand(100);
+      std::vector<Link> linksToDelete;
+      for (auto const& link : graph.links()) {
+        auto const linkStart = imvec(graph.noderef(link.srcNode).pos);
+        auto const linkEnd = imvec(graph.noderef(link.dstNode).pos);
+        if (cutterbox.intersects(AABB(linkStart, linkEnd))) {
+          std::vector<ImVec2> linkPath;
+          genLinkPath(linkPath, linkStart, linkEnd, { 10,100 });
+          if (strokeIntersects(linkPath, cutStroke)) {
+            linksToDelete.push_back(link);
+          }
+        }
+      }
+      for (auto const& link : linksToDelete) {
+        gv.graph->removeLink(link.dstNode, link.dstPin);
+      }
+      gv.linkCuttingStroke.clear();
     }
     gv.uiState = GraphView::UIState::VIEWING;
   }
