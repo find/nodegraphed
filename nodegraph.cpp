@@ -131,14 +131,20 @@ void updateInspectorView(Node* node, char const* name) {
   ImGui::End();
 }
 
-static void drawLink(ImDrawList* drawList, ImVec2 const& start, ImVec2 const& end,
-                     ImU32 color = IM_COL32(200,200,200,200), float thickness = 1.0f) {
-  ImVec2 const pts[] = {
-      start,
-      ImVec2(start.x, glm::mix(start.y, end.y, 0.25)),
-      ImVec2(end.x, glm::mix(start.y, end.y, 0.75)),
-      end
-  };
+static void genLinkPath(std::vector<ImVec2> &buffer, ImVec2 const& start, ImVec2 const& end, ImVec2 const& angledSegmentLengthRange) {
+  buffer.clear();
+  float const xcenter = (start.x + end.x) * 0.5f;
+  float const ycenter = (start.y + end.y) * 0.5f;
+  float const minAngledLength = angledSegmentLengthRange.x;
+  float const maxAngledLength = angledSegmentLengthRange.y;
+
+}
+static void drawLink(ImDrawList* drawList, ImVec2 const& start,
+                     ImVec2 const& end,
+                     ImU32 color = IM_COL32(200, 200, 200, 200),
+                     float thickness = 1.0f) {
+  ImVec2 const pts[] = {start, ImVec2(start.x, glm::mix(start.y, end.y, 0.33f)),
+                        ImVec2(end.x, glm::mix(start.y, end.y, 0.67f)), end};
   drawList->AddPolyline(pts, 4, color, false, thickness);
 }
 
