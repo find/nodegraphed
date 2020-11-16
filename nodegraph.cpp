@@ -219,7 +219,7 @@ void drawGraph(GraphView const& gv, size_t hoveredNode,
       drawList->AddRectFilled(topleft, bottomright, color,
                               cornerRounding(6.f * canvasScale));
 
-      if (gv.nodeSelection.find(idx) != gv.nodeSelection.end())
+      if (gv.nodeSelection.find(idx) != gv.nodeSelection.end() && canvasScale > 0.2)
         drawList->AddRect(
             topleft + ImVec2{-4 * canvasScale, -4 * canvasScale},
             bottomright + ImVec2{4 * canvasScale, 4 * canvasScale},

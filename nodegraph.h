@@ -141,9 +141,18 @@ public:
 
   void addLink(size_t srcnode, int srcpin, size_t dstnode, int dstpin) { 
     if (nodes_.find(srcnode) != nodes_.end() && nodes_.find(dstnode) != nodes_.end()) {
+      removeLink(dstnode, dstpin);
       links_.push_back(Link{ srcnode, srcpin, dstnode, dstpin });
     }
     notifyViewers();
+  }
+
+  void removeLink(size_t dstnode, int dstpin) {
+    auto itr = std::find_if(
+        links_.begin(), links_.end(), [dstnode, dstpin](Link const& link) {
+          return link.dstNode == dstnode && link.dstPin == dstpin;
+        });
+    if (itr != links_.end()) links_.erase(itr);
   }
 
   void removeNode(size_t idx) {
