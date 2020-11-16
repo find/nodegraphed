@@ -27,6 +27,7 @@ static inline float length(const ImVec2& v) {
   return sqrt(v.x * v.x + v.y * v.y);
 }
 static inline ImVec2 toImVec(glm::vec2 const& v) { return {v.x, v.y}; }
+static inline float cornerRounding(float r) { return r > 1 ? r : 0.f; }
 
 struct AABB {
   ImVec2 min, max;
@@ -199,11 +200,11 @@ void drawGraph(GraphView const& gv, size_t hoveredNode, std::set<size_t> const& 
             : hoveredNode == idx ? HOVER_NODE_COLOR : DEFAULT_NODE_COLOR;
 
     if (node.type == Node::Type::NORMAL) {
-      drawList->AddRectFilled(topleft, bottomright, color, 6.f * canvasScale);
+      drawList->AddRectFilled(topleft, bottomright, color, cornerRounding(6.f * canvasScale));
 
       if (gv.nodeSelection.find(idx) != gv.nodeSelection.end())
         drawList->AddRect(topleft, bottomright, IM_COL32(255, 255, 255, 255),
-          6.f * canvasScale);
+          cornerRounding(6.f * canvasScale));
 
       for (int i = 0; i < node.numInputs; ++i) {
         drawList->AddCircleFilled(toCanvas*toImVec(node.inputPinPos(i)), 4*canvasScale, color);
@@ -225,7 +226,7 @@ void drawGraph(GraphView const& gv, size_t hoveredNode, std::set<size_t> const& 
         center.x + DEFAULT_NODE_SIZE.x / 2.f * canvasScale,
         center.y + DEFAULT_NODE_SIZE.y / 2.f * canvasScale};
     drawList->AddRectFilled(topleft, bottomright, PENDING_PLACE_NODE_COLOR,
-                            6.f * canvasScale);
+                            cornerRounding(6.f * canvasScale));
   }
   // Draw Links
 }
@@ -334,12 +335,7 @@ void updateNetworkView(GraphView& gv, char const* name) {
   }
 
   // Mouse action - the dirty part
-  if(ImGui::IsMouseClicked(ImGuiMouseButton_Left) ||
-     ImGui::IsMouseClicked(ImGuiMouseButton_Middle) ||
-     ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
-    gv.isActiveView = mouseInsideCanvas;
-  }
-  if (mouseInsideCanvas) {
+  if (mouseInsideCanvas && ImGui::IsWindowHovered()) {
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
       clickedNode = hoveredNode;
       gv.activeNode = clickedNode;
@@ -353,7 +349,7 @@ void updateNetworkView(GraphView& gv, char const* name) {
 
       auto const modkey = ImGui::GetIO().KeyMods;
       if (gv.uiState == GraphView::UIState::VIEWING) {
-        gv.selectionBoxStart = glm::vec2(mousePos.x, mousePos.y);
+        gv.selectionBoxStart = {mousePos.x, mousePos.y};
         if (modkey & ImGuiKeyModFlags_Shift) {
           gv.uiState = GraphView::UIState::BOX_SELECTING;
         } else if (modkey & ImGuiKeyModFlags_Ctrl) {
@@ -423,7 +419,7 @@ void updateNetworkView(GraphView& gv, char const* name) {
 
   // Dragging can go beyond canvas
   if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 10)) {
-    if (gv.uiState == GraphView::UIState::VIEWING && gv.isActiveView && mouseInsideCanvas) {
+    if (gv.uiState == GraphView::UIState::VIEWING && ImGui::IsWindowHovered() && mouseInsideCanvas) {
       gv.uiState = GraphView::UIState::BOX_SELECTING;
       gv.nodeSelection.clear();
     } else if (gv.uiState == GraphView::UIState::DRAGGING_NODES) {
@@ -435,10 +431,11 @@ void updateNetworkView(GraphView& gv, char const* name) {
       }
     }
   }
-  if (!mouseInsideCanvas && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+  if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
     if (gv.uiState == GraphView::UIState::BOX_SELECTING ||
         gv.uiState == GraphView::UIState::BOX_DESELECTING) {
-      gv.nodeSelection = unconfirmedNodeSelection;
+      if (!ImGui::IsWindowHovered() || !mouseInsideCanvas)
+        gv.nodeSelection = unconfirmedNodeSelection;
     }
     gv.uiState = GraphView::UIState::VIEWING;
   }

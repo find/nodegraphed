@@ -76,7 +76,6 @@ struct GraphView {
   glm::vec2 canvasOffset = { 0,0 };
   float     canvasScale = 1;
   bool      drawGrid = true;
-  bool      isActiveView = false;
   size_t    activeNode = -1;
   std::set<size_t> nodeSelection;
   enum class UIState : uint8_t {
