@@ -13,6 +13,28 @@
 #include <glm/gtx/vec_swizzle.hpp>
 #include <memory>
 
+// --------------------------------------------------------------------
+//                        T O D O   L I S T :
+// --------------------------------------------------------------------
+// [ ] host real(logical) nodes & graphs
+// [ ] dive in nested network
+// [ ] serialization
+// [ ] edit common params in inspector when multiple nodes are selected
+// [ ] data inspector
+// [ ] bypass flag
+// [ ] output flag
+// [X] display names inside network
+// [ ] name font scale (2 levels?)
+// [ ] drag link body to re-route
+// [ ] highlight hovering pin
+// [ ] focus to selected nodes / frame all nodes
+// [ ] copy / paste
+// [ ] undo / redo
+// [ ] window management
+// [ ] grid snapping
+// [ ] config-able appearance
+
+
 static inline ImVec2 operator+(const ImVec2& lhs, const ImVec2& rhs) {
   return ImVec2(lhs.x + rhs.x, lhs.y + rhs.y);
 }
@@ -248,6 +270,8 @@ void drawGraph(GraphView const& gv, size_t hoveredNode,
                          ? imcolor(highlight(node.color, -0.1f, -0.4f))
                          : imcolor(node.color));
 
+    float const fontHeight = ImGui::GetFontSize();
+
     if (node.type == Node::Type::NORMAL) {
       drawList->AddRectFilled(topleft, bottomright, color,
                               cornerRounding(6.f * canvasScale));
@@ -271,6 +295,14 @@ void drawGraph(GraphView const& gv, size_t hoveredNode,
       for (int i = 0; i < node.numOutputs; ++i) {
         drawList->AddCircleFilled(toCanvas * imvec(node.outputPinPos(i)),
                                   4 * canvasScale, color);
+      }
+
+      if (gv.drawName && canvasScale > 0.33) {
+        drawList->AddText(
+            ImVec2{center.x, center.y} +
+                ImVec2{node.size.x / 2.f * canvasScale + 8,
+                       -fontHeight / 2.f},
+            IM_COL32(233, 233, 233, 233), node.name.c_str());
       }
     } else if (node.type == Node::Type::ANCHOR) {
       drawList->AddCircleFilled(imvec(center), 8, color);
@@ -364,7 +396,19 @@ void updateNetworkView(GraphView& gv, char const* name) {
   }
   if (ImGui::BeginMenuBar()) {
     if (ImGui::BeginMenu("View")) {
+      ImGui::MenuItem("Name", nullptr, &gv.drawName);
       ImGui::MenuItem("Grid", nullptr, &gv.drawGrid);
+      ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Help")) {
+      std::string fps = fmt::format("FPS = {}", ImGui::GetIO().Framerate);
+      std::string vtxcnt =
+          fmt::format("Vertices = {}", ImGui::GetIO().MetricsRenderVertices);
+      std::string idxcnt =
+          fmt::format("Indices = {}", ImGui::GetIO().MetricsRenderIndices);
+      ImGui::MenuItem(fps.c_str(), nullptr, nullptr);
+      ImGui::MenuItem(vtxcnt.c_str(), nullptr, nullptr);
+      ImGui::MenuItem(idxcnt.c_str(), nullptr, nullptr);
       ImGui::EndMenu();
     }
     ImGui::EndMenuBar();

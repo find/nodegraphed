@@ -59,6 +59,7 @@ void init()
 
   for (int i = 0; i < 20; ++i) {
     auto node = editorui::Node{};
+    node.name = "node_" + std::to_string(i);
     node.pos.y = i*80.f;
     node.numInputs = i/3;
     graph.addNode(node);

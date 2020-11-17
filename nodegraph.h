@@ -36,7 +36,7 @@ namespace std {
 template <>
 struct hash<editorui::NodePin> {
   size_t operator()(editorui::NodePin const& pin) const noexcept {
-    return std::hash<size_t>()(pin.nodeIndex) ^ std::hash<int>()(pin.pinNumber);
+    return std::hash<size_t>()(pin.nodeIndex) ^ std::hash<int>()(pin.pinNumber) ^ (int)pin.type;
   }
 };
 }  // namespace std
@@ -110,6 +110,7 @@ struct GraphView {
   glm::vec2 canvasOffset = {0, 0};
   float canvasScale = 1;
   bool drawGrid = true;
+  bool drawName = true;
   size_t activeNode = -1;
   std::set<size_t> nodeSelection;
   enum class UIState : uint8_t {
