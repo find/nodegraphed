@@ -111,7 +111,10 @@ struct GraphView {
   float canvasScale = 1;
   bool drawGrid = true;
   bool drawName = true;
+  size_t hoveredNode = -1;
   size_t activeNode = -1;
+  NodePin hoveredPin = {NodePin::NONE, size_t(-1), -1};
+  NodePin activePin = {NodePin::NONE, size_t(-1), -1};
   std::set<size_t> nodeSelection;
   enum class UIState : uint8_t {
     VIEWING,
