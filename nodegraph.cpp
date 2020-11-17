@@ -27,9 +27,14 @@
 // [ ] name font scale (2 levels?)
 // [ ] drag link body to re-route
 // [X] highlight hovering pin
+// [ ] optimize link routing
 // [ ] focus to selected nodes / frame all nodes
 // [ ] copy / paste
-// [ ] undo / redo
+// [ ] undo / redo / edit history tree
+// [ ] node shape
+// [ ] read-only view
+// [ ] editing policy / limited allowed action
+// [ ] syntax-highlighting text editor
 // [ ] window management
 // [ ] grid snapping
 // [ ] config-able appearance
@@ -206,7 +211,7 @@ void GraphView::onGraphChanged()
   }
 }
 
-void updateInspectorView(Node* node, char const* name)
+void updateInspectorView(GraphView& gv, char const* name)
 {
   auto title = fmt::format("Param Inspector##inspector{}", name);
   if (!ImGui::Begin(title.c_str(), nullptr, ImGuiWindowFlags_MenuBar)) {
@@ -214,20 +219,33 @@ void updateInspectorView(Node* node, char const* name)
     return;
   }
 
-  if (node) {
+  if (gv.nodeSelection.empty()) {
+    ImGui::Text("Nothing selected");
+  } else if (gv.nodeSelection.size()==1) {
+    auto id = *gv.nodeSelection.begin();
+    auto& node = gv.graph->noderef(id);
     // ImGui::Text(node->name.c_str());
     char namebuf[512] = {0};
-    memcpy(namebuf, node->name.c_str(), node->name.size());
+    memcpy(namebuf, node.name.c_str(), node.name.size());
     if (ImGui::InputText("##nodename",
                          namebuf,
                          sizeof(namebuf),
                          ImGuiInputTextFlags_CharsNoBlank | ImGuiInputTextFlags_EnterReturnsTrue))
-      node->name = namebuf;
-    ImGui::SliderInt("Number of Inputs", &node->numInputs, 0, 10);
-    ImGui::SliderInt("Number of Outputs", &node->numOutputs, 0, 10);
-    ImGui::ColorEdit4("Color", &node->color.r);
+      node.name = namebuf;
+    ImGui::SliderInt("Number of Inputs", &node.numInputs, 0, 10);
+    ImGui::SliderInt("Number of Outputs", &node.numOutputs, 0, 10);
+    ImGui::ColorEdit4("Color", &node.color.r, ImGuiColorEditFlags_PickerHueWheel);
   } else {
-    ImGui::Text("nothing selected");
+    glm::vec4 avgColor = { 0,0,0,0 };
+    for (auto id : gv.nodeSelection) {
+      avgColor += gv.graph->noderef(id).color;
+    }
+    avgColor /= float(gv.nodeSelection.size());
+    if (ImGui::ColorPicker4("Color", &avgColor.r, ImGuiColorEditFlags_PickerHueWheel)) {
+      for (auto id : gv.nodeSelection) {
+        gv.graph->noderef(id).color = avgColor;
+      }
+    }
   }
 
   ImGui::End();
@@ -725,11 +743,7 @@ void updateNetworkView(GraphView& gv, char const* name)
 void updateAndDraw(GraphView& gv, char const* name)
 {
   updateNetworkView(gv, name);
-
-  // node inspector
-  Node* toInspect =
-      gv.nodeSelection.size() == 1 ? &gv.graph->noderef(*gv.nodeSelection.begin()) : nullptr;
-  updateInspectorView(toInspect, name);
+  updateInspectorView(gv, name);
 }
 
 } // namespace editorui
