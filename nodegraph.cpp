@@ -107,7 +107,7 @@ static void drawLink(ImDrawList* drawList, ImVec2 const& start,
                      float thickness = 1.0f) {
   static std::vector<ImVec2> buff;
   genLinkPath(buff, start, end, { 10, 100 });
-  drawList->AddPolyline(buff.data(), 4, color, false, thickness);
+  drawList->AddPolyline(buff.data(), buff.size(), color, false, thickness);
 }
 static bool strokeIntersects(std::vector<ImVec2> const& a, std::vector<ImVec2> const& b) {
   // TODO: implement sweep line algorithm
@@ -242,8 +242,11 @@ void drawGraph(GraphView const& gv, size_t hoveredNode,
     ImU32 const color =
         unconfirmedNodeSelection.find(idx) != unconfirmedNodeSelection.end()
             ? imcolor(highlight(node.color, 0.1f, 0.5f))
-            : hoveredNode == idx ? imcolor(highlight(node.color, 0.02f, 0.3f))
-                                 : imcolor(node.color);
+            : hoveredNode == idx
+                  ? imcolor(highlight(node.color, 0.02f, 0.3f))
+                  : (gv.nodeSelection.find(idx) != gv.nodeSelection.end()
+                         ? imcolor(highlight(node.color, -0.1f, -0.4f))
+                         : imcolor(node.color));
 
     if (node.type == Node::Type::NORMAL) {
       drawList->AddRectFilled(topleft, bottomright, color,
@@ -288,13 +291,14 @@ void drawGraph(GraphView const& gv, size_t hoveredNode,
 
   // Draw Links
   for (auto const& link: gv.graph->links()) {
-    drawLink(
-        drawList,
-        toCanvas *
-            imvec(gv.graph->noderef(link.srcNode).outputPinPos(link.srcPin)),
-        toCanvas *
-            imvec(gv.graph->noderef(link.dstNode).inputPinPos(link.dstPin)),
-        imcolor(highlight(gv.graph->noderef(link.srcNode).color, 0, 0.2f, 1.0f))
+    drawLink(drawList,
+             toCanvas * imvec(gv.graph->noderef(link.second.nodeIndex)
+                                  .outputPinPos(link.second.pinNumber)),
+             toCanvas * imvec(gv.graph->noderef(link.first.nodeIndex)
+                                  .inputPinPos(link.first.pinNumber)),
+             imcolor(highlight(gv.graph->noderef(link.second.nodeIndex).color,
+                               0, 0.2f, 1.0f)),
+             glm::clamp(1.f * canvasScale, 1.0f, 4.0f)
       );
   }
 
@@ -302,14 +306,14 @@ void drawGraph(GraphView const& gv, size_t hoveredNode,
   ImVec2 curveStart, curveEnd;
   bool hasPendingLink = false;
   if (gv.uiState == GraphView::UIState::DRAGGING_LINK_HEAD) {
-    curveEnd = toCanvas * (imvec(gv.graph->noderef(gv.pendingLink.dstNode)
-      .inputPinPos(gv.pendingLink.dstPin)));
+    curveEnd = toCanvas * (imvec(gv.graph->noderef(gv.pendingLink.destiny.nodeIndex)
+      .inputPinPos(gv.pendingLink.destiny.pinNumber)));
     curveStart = mousePos;
     hasPendingLink = true;
   }
   else if (gv.uiState == GraphView::UIState::DRAGGING_LINK_TAIL) {
-    curveStart = toCanvas * (imvec(gv.graph->noderef(gv.pendingLink.srcNode)
-                              .outputPinPos(gv.pendingLink.srcPin)));
+    curveStart = toCanvas * (imvec(gv.graph->noderef(gv.pendingLink.source.nodeIndex)
+                              .outputPinPos(gv.pendingLink.source.pinNumber)));
     curveEnd = mousePos;
     hasPendingLink = true;
   }
@@ -461,10 +465,12 @@ void updateNetworkView(GraphView& gv, char const* name) {
       } else if (clickedPin.node != -1) {
         if (clickedPin.type == OUTPUT) {
           gv.uiState = GraphView::UIState::DRAGGING_LINK_TAIL;
-          gv.pendingLink = {clickedPin.node, clickedPin.pin, size_t(-1), -1};
+          gv.pendingLink = {{NodePin::OUTPUT, clickedPin.node, clickedPin.pin},
+                            {NodePin::INPUT, size_t(-1), -1}};
         } else if (clickedPin.type == INPUT) {
           gv.uiState = GraphView::UIState::DRAGGING_LINK_HEAD;
-          gv.pendingLink = {size_t(-1), -1, clickedPin.node, clickedPin.pin};
+          gv.pendingLink = {{NodePin::OUTPUT, size_t(-1), -1},
+                            {NodePin::INPUT, clickedPin.node, clickedPin.pin}};
         }
       }
 
@@ -506,20 +512,20 @@ void updateNetworkView(GraphView& gv, char const* name) {
       } else if (gv.uiState == GraphView::UIState::DRAGGING_LINK_HEAD) {
         if (hoveredPin.type == OUTPUT) {
           gv.graph->addLink(hoveredPin.node, hoveredPin.pin,
-                            gv.pendingLink.dstNode, gv.pendingLink.dstPin);
+                            gv.pendingLink.destiny.nodeIndex, gv.pendingLink.destiny.pinNumber);
         } else if (hoveredPin.type == NONE && hoveredNode != -1 &&
                    graph.noderef(hoveredNode).numOutputs == 1) {
           gv.graph->addLink(hoveredNode, 0,
-                            gv.pendingLink.dstNode,
-                            gv.pendingLink.dstPin);
+                            gv.pendingLink.destiny.nodeIndex,
+                            gv.pendingLink.destiny.pinNumber);
         }
       } else if (gv.uiState == GraphView::UIState::DRAGGING_LINK_TAIL) {
         if (hoveredPin.type == INPUT) {
-          gv.graph->addLink(gv.pendingLink.srcNode, gv.pendingLink.srcPin,
+          gv.graph->addLink(gv.pendingLink.source.nodeIndex, gv.pendingLink.source.pinNumber,
                             hoveredPin.node, hoveredPin.pin);
         } else if (hoveredPin.type == NONE && hoveredNode != -1 &&
                    graph.noderef(hoveredNode).numInputs == 1) {
-          gv.graph->addLink(gv.pendingLink.srcNode, gv.pendingLink.srcPin,
+          gv.graph->addLink(gv.pendingLink.source.nodeIndex, gv.pendingLink.source.pinNumber,
                             hoveredNode, 0);
         }
       }
@@ -595,20 +601,20 @@ void updateNetworkView(GraphView& gv, char const* name) {
         cutStroke[i] = pos;
       }
       cutterbox.expand(100);
-      std::vector<Link> linksToDelete;
+      std::vector<NodePin> dstPinsToDelete;
       for (auto const& link : graph.links()) {
-        auto const linkStart = imvec(graph.noderef(link.srcNode).pos);
-        auto const linkEnd = imvec(graph.noderef(link.dstNode).pos);
+        auto const linkStart = imvec(graph.noderef(link.second.nodeIndex).pos);
+        auto const linkEnd = imvec(graph.noderef(link.first.nodeIndex).pos);
         if (cutterbox.intersects(AABB(linkStart, linkEnd))) {
           std::vector<ImVec2> linkPath;
           genLinkPath(linkPath, linkStart, linkEnd, { 10,100 });
           if (strokeIntersects(linkPath, cutStroke)) {
-            linksToDelete.push_back(link);
+            dstPinsToDelete.push_back({NodePin::INPUT, link.first.nodeIndex, link.first.pinNumber});
           }
         }
       }
-      for (auto const& link : linksToDelete) {
-        gv.graph->removeLink(link.dstNode, link.dstPin);
+      for (auto const& pin : dstPinsToDelete) {
+        gv.graph->removeLink(pin.nodeIndex, pin.pinNumber);
       }
       gv.linkCuttingStroke.clear();
     }
