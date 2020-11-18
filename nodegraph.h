@@ -81,14 +81,17 @@ struct Node
   int         numInputs  = 1;
   int         numOutputs = 1;
   glm::vec2   pos        = {0, 0};
-  glm::vec2   size       = DEFAULT_NODE_SIZE;
   glm::vec4   color      = DEFAULT_NODE_COLOR;
 
+  glm::vec2 size() const
+  {
+    return glm::vec2(std::max<float>(std::max(numInputs, numOutputs) * 10 / 0.9f, DEFAULT_NODE_SIZE.x), DEFAULT_NODE_SIZE.y);
+  }
   glm::vec2 inputPinPos(int i) const
   {
     if (type == Type::NORMAL) {
-      return glm::vec2((size.x * 0.9f) * float(i + 1) / (numInputs + 1) - size.x * 0.45f,
-                       -size.y / 2.f - 4) +
+      return glm::vec2((size().x * 0.9f) * float(i + 1) / (numInputs + 1) - size().x * 0.45f,
+                       -size().y / 2.f - 4) +
              pos;
     } else {
       return pos;
@@ -97,22 +100,13 @@ struct Node
   glm::vec2 outputPinPos(int i) const
   {
     if (type == Type::NORMAL) {
-      return glm::vec2((size.x * 0.9f) * float(i + 1) / (numOutputs + 1) - size.x * 0.45f,
-                       size.y / 2.f + 4) +
+      return glm::vec2((size().x * 0.9f) * float(i + 1) / (numOutputs + 1) - size().x * 0.45f,
+                       size().y / 2.f + 4) +
              pos;
     } else {
       return pos;
     }
   }
-
-  // TODO: next-gen API
-  // virtual std::vector<glm::vec2> getShape() const {
-  //   return{ {-32,12}, {32,12}, {32,-12}, {-32,-12} };
-  // }
-  // virtual bool hitTest(glm::vec2 const& pt) const {
-  //   return pt.x <= DEFAULT_NODE_SIZE.x / 2 && pt.x >= -DEFAULT_NODE_SIZE.x /
-  //   2 && pt.y <= DEFAULT_NODE_SIZE.y / 2 && pt.y >= -DEFAULT_NODE_SIZE.y / 2;
-  // }
 };
 
 class Graph;
