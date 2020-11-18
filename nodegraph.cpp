@@ -21,7 +21,7 @@
 // [ ] dive in nested network
 // [ ] serialization
 // [~] edit common params in inspector when multiple nodes are selected
-// [ ] long input list
+// [~] long input list
 // [ ] data inspector
 // [ ] bypass flag
 // [ ] output flag
@@ -29,7 +29,7 @@
 // [ ] name font scale (2 levels?)
 // [X] drag link body to re-route
 // [X] highlight hovering pin
-// [ ] optimize link routing
+// [X] optimize link routing
 // [ ] focus to selected nodes / frame all nodes
 // [ ] copy / paste
 // [ ] undo / redo / edit history tree
@@ -282,8 +282,10 @@ void updateInspectorView(GraphView& gv, char const* name)
                          sizeof(namebuf),
                          ImGuiInputTextFlags_CharsNoBlank | ImGuiInputTextFlags_EnterReturnsTrue))
       node.name = namebuf;
-    ImGui::SliderInt("Number of Inputs", &node.numInputs, 0, 20);
-    ImGui::SliderInt("Number of Outputs", &node.numOutputs, 0, 20);
+    if (ImGui::SliderInt("Number of Inputs", &node.numInputs, 0, 20))
+      gv.graph->updateLinkPath(id);
+    if (ImGui::SliderInt("Number of Outputs", &node.numOutputs, 0, 20))
+      gv.graph->updateLinkPath(id);
     ImGui::ColorEdit4("Color", &node.color.r, ImGuiColorEditFlags_PickerHueWheel);
   } else {
     glm::vec4 avgColor = { 0,0,0,0 };

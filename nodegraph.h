@@ -210,12 +210,46 @@ public:
   std::vector<glm::vec2> genLinkPath(glm::vec2 const& start, glm::vec2 const& end)
   {
     std::vector<glm::vec2> path;
-    float const xcenter = (start.x + end.x) * 0.5f;
-    float const ycenter = (start.y + end.y) * 0.5f;
-    path = {start,
+    float xcenter = (start.x + end.x) * 0.5f;
+    float ycenter = (start.y + end.y) * 0.5f;
+    float dx = end.x - start.x;
+    float dy = end.y - start.y;
+    auto sign = [](float x) { return x > 0 ? 1 : x < 0 ? -1 : 0; };
+    /*
+    return {start,
             glm::vec2(start.x, glm::mix(start.y, end.y, 0.33f)),
             glm::vec2(end.x, glm::mix(start.y, end.y, 0.67f)),
             end};
+            */
+    if (dy < 12) {
+      if (std::abs(dx) < DEFAULT_NODE_SIZE.x) {
+        xcenter += sign(dx) * DEFAULT_NODE_SIZE.x;
+      }
+      auto endextend = end + glm::vec2(0, -10);
+      dy -= 20;
+      
+      path.push_back(start);
+      path.push_back(start + glm::vec2(0, 10));
+      if (abs(dx) > abs(dy) * 4) {
+        path.push_back(glm::vec2(xcenter + sign(dx) * dy / 2, path.back().y));
+        path.push_back(glm::vec2(xcenter - sign(dx) * dy / 2, endextend.y));
+      } else {
+        path.push_back(glm::vec2(xcenter, path.back().y));
+        path.push_back(glm::vec2(xcenter, endextend.y));
+      }
+      path.push_back(endextend);
+      path.push_back(end);
+    } else {
+      path.push_back(start);
+      if (abs(dy) > abs(dx) * 3) {
+        path.push_back(glm::vec2(start.x, ycenter - abs(dx) / 2));
+        path.push_back(glm::vec2(end.x, ycenter + abs(dx) / 2));
+      } else {
+        path.push_back(glm::vec2(start.x, glm::mix(start.y, end.y, 0.33f)));
+        path.push_back(glm::vec2(end.x, glm::mix(start.y, end.y, 0.67f)));
+      }
+      path.push_back(end);
+    }
     return path;
   }
 
