@@ -241,9 +241,14 @@ public:
       path.push_back(end);
     } else {
       path.push_back(start);
-      if (abs(dy) > abs(dx) * 3) {
-        path.push_back(glm::vec2(start.x, ycenter - abs(dx) / 2));
-        path.push_back(glm::vec2(end.x, ycenter + abs(dx) / 2));
+      if (abs(dy) > abs(dx) * 1.6f + 44) {
+        if (abs(dy) < 80) {
+          path.push_back(glm::vec2(start.x, ycenter - abs(dx) / 2));
+          path.push_back(glm::vec2(end.x, ycenter + abs(dx) / 2));
+        } else {
+          path.push_back(glm::vec2(start.x, end.y - abs(dx) - 20));
+          path.push_back(glm::vec2(end.x, end.y - 20));
+        }
       } else {
         path.push_back(glm::vec2(start.x, glm::mix(start.y, end.y, 0.33f)));
         path.push_back(glm::vec2(end.x, glm::mix(start.y, end.y, 0.67f)));
