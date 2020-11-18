@@ -107,6 +107,19 @@ struct Node
       return pos;
     }
   }
+
+  // TODO
+  bool beforeCreate();
+  void afterCreate();
+  bool onNameChanged(std::string const& newname);
+  void onColorChanged(glm::vec4 const& newcolor);
+  bool onSelected();
+  bool onDoubleClicked();
+  bool onMovedTo(glm::vec2 const& pos);
+  bool beforeDelete();
+  void afterDelete();
+  bool onLinkedFrom(int myInputPin, Node const* that, int thatOutputPin);
+  bool onLinkedTo(int myOutputPin, Node const* that, int thatInputPin);
 };
 
 class Graph;
@@ -153,12 +166,14 @@ protected:
   std::unordered_map<NodePin, NodePin>
       links_; // map from destiny to source, because each input pin accepts only one source, but
               // each output pin can be linked to many input pins
+  std::unordered_map<NodePin, std::vector<glm::vec2>> linkPathes_; // cached link pathes
   std::vector<size_t>  nodeOrder_;
   std::set<GraphView*> viewers_;
 
 public:
   auto const& nodes() const { return nodes_; }
   auto const& links() const { return links_; }
+  auto const& linkPathes() const { return linkPathes_; }
   auto const& order() const { return nodeOrder_; }
   auto const& viewers() const { return viewers_; }
 
@@ -171,6 +186,8 @@ public:
   }
 
   Node& noderef(size_t idx) { return nodes_.at(idx); }
+  Node const& noderef(size_t idx) const { return nodes_.at(idx); }
+  auto const& linkPath(NodePin const& pin) const { return linkPathes_.at(pin); }
 
   void addViewer(GraphView* view)
   {
@@ -190,19 +207,55 @@ public:
       v->onGraphChanged();
   }
 
+  std::vector<glm::vec2> genLinkPath(glm::vec2 const& start, glm::vec2 const& end)
+  {
+    std::vector<glm::vec2> path;
+    float const xcenter = (start.x + end.x) * 0.5f;
+    float const ycenter = (start.y + end.y) * 0.5f;
+    path = {start,
+            glm::vec2(start.x, glm::mix(start.y, end.y, 0.33f)),
+            glm::vec2(end.x, glm::mix(start.y, end.y, 0.67f)),
+            end};
+    return path;
+  }
+
+  void updateLinkPath(size_t nodeidx, int ipin=-1)
+  {
+    if (ipin != -1) {
+      auto np = NodePin{ NodePin::INPUT, nodeidx, ipin };
+      auto linkitr = links_.find(np);
+      if (linkitr!=links_.end()) {
+        linkPathes_[np] = genLinkPath(
+          nodes_[linkitr->second.nodeIndex].outputPinPos(linkitr->second.pinNumber),
+          nodes_[nodeidx].inputPinPos(ipin));
+      }
+    } else {
+      for (auto itr = links_.begin(); itr != links_.end(); ++itr) {
+        if (itr->first.nodeIndex == nodeidx || itr->second.nodeIndex == nodeidx) {
+          linkPathes_[itr->first] = genLinkPath(
+            nodes_[itr->second.nodeIndex].outputPinPos(itr->second.pinNumber),
+            nodes_[itr->first.nodeIndex].inputPinPos(itr->first.pinNumber));
+        }
+      }
+    }
+  }
+
   void addLink(size_t srcnode, int srcpin, size_t dstnode, int dstpin)
   {
     if (nodes_.find(srcnode) != nodes_.end() && nodes_.find(dstnode) != nodes_.end()) {
       removeLink(dstnode, dstpin);
-      // links_.push_back(Link{srcnode, srcpin, dstnode, dstpin});
-      links_[NodePin{NodePin::INPUT, dstnode, dstpin}] = NodePin{NodePin::OUTPUT, srcnode, srcpin};
+      auto dst = NodePin{ NodePin::INPUT, dstnode, dstpin };
+      links_[dst] = NodePin{ NodePin::OUTPUT, srcnode, srcpin };
+      updateLinkPath(dstnode, dstpin);
     }
     notifyViewers();
   }
 
   void removeLink(size_t dstnode, int dstpin)
   {
-    links_.erase(NodePin{NodePin::INPUT, dstnode, dstpin});
+    auto const np = NodePin{ NodePin::INPUT, dstnode, dstpin };
+    links_.erase(np);
+    linkPathes_.erase(np);
   }
 
   size_t upstreamNodeOf(size_t nodeidx, int pin)
@@ -242,6 +295,17 @@ public:
       }
     }
     notifyViewers();
+  }
+
+  template<class Container>
+  void moveNodes(Container const& indices, glm::vec2 const& delta)
+  {
+    for (auto idx : indices) {
+      noderef(idx).pos += delta;
+    }
+    for (auto idx : indices) {
+      updateLinkPath(idx);
+    }
   }
 
   void shiftToEnd(size_t nodeid)
