@@ -12,6 +12,8 @@
 #include <glm/gtx/matrix_transform_2d.hpp>
 #include <glm/gtx/string_cast.hpp>
 #include <glm/gtx/vec_swizzle.hpp>
+
+#include <cstdlib>
 #include <memory>
 
 // --------------------------------------------------------------------
@@ -41,6 +43,7 @@
 // [ ] grid snapping
 // [ ] config-able appearance
 
+// helpers {{{
 static inline ImVec2 operator+(const ImVec2& lhs, const ImVec2& rhs)
 {
   return ImVec2(lhs.x + rhs.x, lhs.y + rhs.y);
@@ -153,25 +156,7 @@ struct AABB
     return !(max.x < that.min.x || that.max.x < min.x || max.y < that.min.y || that.max.y < min.y);
   }
 };
-/*
-static void genLinkPath(std::vector<ImVec2>& buffer,
-                        ImVec2 const&        start,
-                        ImVec2 const&        end,
-                        ImVec2 const&        segmentLengthRange)
-{
-  // TODO: make this prettier
-  buffer.clear();
-  float const xcenter = (start.x + end.x) * 0.5f;
-  float const ycenter = (start.y + end.y) * 0.5f;
-  float const minAngledLength = segmentLengthRange.x;
-  float const maxAngledLength = segmentLengthRange.y;
 
-  buffer = {start,
-            ImVec2(start.x, glm::mix(start.y, end.y, 0.33f)),
-            ImVec2(end.x, glm::mix(start.y, end.y, 0.67f)),
-            end};
-}
-*/
 static std::vector<ImVec2> transform(std::vector<glm::vec2> const& src, glm::mat3 const& mat)
 {
   std::vector<ImVec2> result(src.size());
@@ -230,6 +215,7 @@ static float pointSegmentDistance(Vec2 const& pt, Vec2 const& segStart, Vec2 con
     *outClosestPoint = closept;
   return length(diff);
 }
+// helpers }}}
 
 namespace editorui {
 
@@ -354,6 +340,18 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
     drawList->AddRectFilled(aabb.min, aabb.max, DESELECTION_BOX_COLOR);
   }
 
+  // Draw Links
+  for (auto const& link : gv.graph->links()) {
+    if (gv.uiState == GraphView::UIState::DRAGGING_LINK_BODY && gv.pendingLink.destiny == link.second)
+      continue;
+    auto path = transform(gv.graph->linkPath(link.first), toCanvas);
+    drawList->AddPolyline(
+      path.data(), int(path.size()),
+      imcolor(highlight(gv.graph->noderef(link.second.nodeIndex).color, 0, 0.2f, 1.0f)),
+      false,
+      glm::clamp(1.f * canvasScale, 1.0f, 4.0f));
+  }
+
   // Nodes
   auto visibilityClipingArea = canvasArea;
   visibilityClipingArea.expand(8 * canvasScale);
@@ -439,18 +437,6 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
         topleft, bottomright, PENDING_PLACE_NODE_COLOR, cornerRounding(6.f * canvasScale));
   }
 
-  // Draw Links
-  for (auto const& link : gv.graph->links()) {
-    if (gv.uiState == GraphView::UIState::DRAGGING_LINK_BODY && gv.pendingLink.destiny == link.second)
-      continue;
-    auto path = transform(gv.graph->linkPath(link.first), toCanvas);
-    drawList->AddPolyline(
-      path.data(), int(path.size()),
-      imcolor(highlight(gv.graph->noderef(link.second.nodeIndex).color, 0, 0.2f, 1.0f)),
-      false,
-      glm::clamp(1.f * canvasScale, 1.0f, 4.0f));
-  }
-
   // Pending Links ...
   auto drawLink = [&gv, drawList, &toCanvas, &toLocal](glm::vec2 const& start, glm::vec2 const& end) {
     auto path = transform(gv.graph->genLinkPath(start, end), toCanvas);
@@ -524,6 +510,14 @@ void updateNetworkView(GraphView& gv, char const* name)
     return;
   }
   if (ImGui::BeginMenuBar()) {
+    if (ImGui::BeginMenu("File")) {
+      ImGui::MenuItem("Open ...", nullptr, nullptr);
+      ImGui::MenuItem("Save ...", nullptr, nullptr);
+      if (ImGui::MenuItem("Quit", nullptr, nullptr)) {
+        // TODO
+      }
+      ImGui::EndMenu();
+    }
     if (ImGui::BeginMenu("View")) {
       ImGui::MenuItem("Name", nullptr, &gv.drawName);
       ImGui::MenuItem("Grid", nullptr, &gv.drawGrid);

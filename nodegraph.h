@@ -1,13 +1,17 @@
 #pragma once
+#include <glm/glm.hpp>
+#include <nlohmann/json_fwd.hpp>
+
 #include <algorithm>
 #include <cstdint>
-#include <glm/glm.hpp>
 #include <map>
 #include <memory>
 #include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+class NodeGraphHook;
 
 namespace editorui {
 struct NodePin
@@ -82,6 +86,7 @@ struct Node
   int         numOutputs = 1;
   glm::vec2   pos        = {0, 0};
   glm::vec4   color      = DEFAULT_NODE_COLOR;
+  void*       payload    = nullptr;
 
   glm::vec2 size() const
   {
@@ -107,19 +112,6 @@ struct Node
       return pos;
     }
   }
-
-  // TODO
-  bool beforeCreate();
-  void afterCreate();
-  bool onNameChanged(std::string const& newname);
-  void onColorChanged(glm::vec4 const& newcolor);
-  bool onSelected();
-  bool onDoubleClicked();
-  bool onMovedTo(glm::vec2 const& pos);
-  bool beforeDelete();
-  void afterDelete();
-  bool onLinkedFrom(int myInputPin, Node const* that, int thatOutputPin);
-  bool onLinkedTo(int myOutputPin, Node const* that, int thatInputPin);
 };
 
 class Graph;
@@ -169,6 +161,8 @@ protected:
   std::unordered_map<NodePin, std::vector<glm::vec2>> linkPathes_; // cached link pathes
   std::vector<size_t>  nodeOrder_;
   std::set<GraphView*> viewers_;
+  NodeGraphHook* hook_ = nullptr;
+  void* payload_ = nullptr;
 
 public:
   auto const& nodes() const { return nodes_; }
@@ -176,6 +170,7 @@ public:
   auto const& linkPathes() const { return linkPathes_; }
   auto const& order() const { return nodeOrder_; }
   auto const& viewers() const { return viewers_; }
+  auto const& hook() const { return hook_; }
 
   size_t addNode(Node const& node)
   {
@@ -201,13 +196,18 @@ public:
       viewers_.erase(view);
   }
 
+  void setHook(NodeGraphHook* hook)
+  {
+    hook_ = hook;
+  }
+
   void notifyViewers()
   {
     for (auto* v : viewers_)
       v->onGraphChanged();
   }
 
-  std::vector<glm::vec2> genLinkPath(glm::vec2 const& start, glm::vec2 const& end)
+  std::vector<glm::vec2> genLinkPath(glm::vec2 const& start, glm::vec2 const& end, float avoidenceWidth=DEFAULT_NODE_SIZE.x)
   {
     std::vector<glm::vec2> path;
     float xcenter = (start.x + end.x) * 0.5f;
@@ -215,15 +215,9 @@ public:
     float dx = end.x - start.x;
     float dy = end.y - start.y;
     auto sign = [](float x) { return x > 0 ? 1 : x < 0 ? -1 : 0; };
-    /*
-    return {start,
-            glm::vec2(start.x, glm::mix(start.y, end.y, 0.33f)),
-            glm::vec2(end.x, glm::mix(start.y, end.y, 0.67f)),
-            end};
-            */
-    if (dy < 12) {
-      if (std::abs(dx) < DEFAULT_NODE_SIZE.x) {
-        xcenter += sign(dx) * DEFAULT_NODE_SIZE.x;
+    if (dy < 24) {
+      if (std::abs(dx) < avoidenceWidth) {
+        xcenter += sign(dx) * avoidenceWidth;
       }
       auto endextend = end + glm::vec2(0, -10);
       dy -= 20;
@@ -231,27 +225,36 @@ public:
       path.push_back(start);
       path.push_back(start + glm::vec2(0, 10));
       if (abs(dx) > abs(dy) * 4) {
-        path.push_back(glm::vec2(xcenter + sign(dx) * dy / 2, path.back().y));
-        path.push_back(glm::vec2(xcenter - sign(dx) * dy / 2, endextend.y));
+        path.emplace_back(xcenter + sign(dx) * dy / 2, path.back().y);
+        path.emplace_back(xcenter - sign(dx) * dy / 2, endextend.y);
       } else {
-        path.push_back(glm::vec2(xcenter, path.back().y));
-        path.push_back(glm::vec2(xcenter, endextend.y));
+        path.emplace_back(xcenter, path.back().y);
+        path.emplace_back(xcenter, endextend.y);
       }
       path.push_back(endextend);
       path.push_back(end);
     } else {
       path.push_back(start);
-      if (abs(dy) > abs(dx) * 1.6f + 44) {
-        if (abs(dy) < 80) {
-          path.push_back(glm::vec2(start.x, ycenter - abs(dx) / 2));
-          path.push_back(glm::vec2(end.x, ycenter + abs(dx) / 2));
+      if (dy > abs(dx) + 44) {
+        if (dy < 80) {
+          path.emplace_back(start.x, ycenter - abs(dx) / 2);
+          path.emplace_back(end.x, ycenter + abs(dx) / 2);
         } else {
-          path.push_back(glm::vec2(start.x, end.y - abs(dx) - 20));
-          path.push_back(glm::vec2(end.x, end.y - 20));
+          path.emplace_back(start.x, end.y - abs(dx) - 20);
+          path.emplace_back(end.x, end.y - 20);
         }
       } else {
-        path.push_back(glm::vec2(start.x, glm::mix(start.y, end.y, 0.33f)));
-        path.push_back(glm::vec2(end.x, glm::mix(start.y, end.y, 0.67f)));
+        if (abs(dx)>dy) {
+          path.emplace_back(start.x, start.y+10);
+          path.emplace_back(start.x+sign(dx)*(dy-20)/2, ycenter);
+          path.emplace_back(end.x-sign(dx)*(dy-20)/2, ycenter);
+          path.emplace_back(end.x, end.y-10);
+        } else if (dy>abs(dx)) {
+          // path.emplace_back(start.x, end.y - abs(dx));
+          path.emplace_back(end.x, start.y + abs(dx));
+          // path.emplace_back(start.x, glm::mix(start.y, end.y, 0.33f));
+          // path.emplace_back(end.x, glm::mix(start.y, end.y, 0.67f));
+        }
       }
       path.push_back(end);
     }
@@ -264,16 +267,22 @@ public:
       auto np = NodePin{ NodePin::INPUT, nodeidx, ipin };
       auto linkitr = links_.find(np);
       if (linkitr!=links_.end()) {
+        auto const& startnode = nodes_[linkitr->second.nodeIndex];
+        auto const& endnode = nodes_[nodeidx];
         linkPathes_[np] = genLinkPath(
-          nodes_[linkitr->second.nodeIndex].outputPinPos(linkitr->second.pinNumber),
-          nodes_[nodeidx].inputPinPos(ipin));
+          startnode.outputPinPos(linkitr->second.pinNumber),
+          endnode.inputPinPos(ipin),
+          std::min(startnode.size().x, endnode.size().x));
       }
     } else {
       for (auto itr = links_.begin(); itr != links_.end(); ++itr) {
         if (itr->first.nodeIndex == nodeidx || itr->second.nodeIndex == nodeidx) {
+          auto const& startnode = nodes_[itr->second.nodeIndex];
+          auto const& endnode = nodes_[itr->first.nodeIndex];
           linkPathes_[itr->first] = genLinkPath(
-            nodes_[itr->second.nodeIndex].outputPinPos(itr->second.pinNumber),
-            nodes_[itr->first.nodeIndex].inputPinPos(itr->first.pinNumber));
+            startnode.outputPinPos(itr->second.pinNumber),
+            endnode.inputPinPos(itr->first.pinNumber),
+            std::min(startnode.size().x, endnode.size().x));
         }
       }
     }
@@ -363,5 +372,34 @@ public:
 };
 
 void updateAndDraw(GraphView& graph, char const* name);
+
+class NodeGraphHook
+{
+public:
+  virtual bool      save(Graph const* host, nlohmann::json& section) { return false; }
+  virtual bool      load(Graph *host, nlohmann::json const& section) { return false; }
+  virtual bool      graphCanBeCreated(Graph const* host) { return true; }
+  virtual void*     createGraph(Graph const* host) { return nullptr; }
+  virtual bool      nodeCanBeCreated(Graph const* host, std::string const& name) { return true; }
+  virtual void*     createNode(Graph* host, std::string const& name) { return nullptr; }
+  virtual void      afterCreate(Graph* host, Node* node) { }
+  virtual bool      onNodeNameChanged(Node* node, std::string& newname) { return true; }
+  virtual void      onNodeColorChanged(Node* node, glm::vec4 const& newcolor) { }
+  virtual glm::vec2 getNodeSize(Node* node) { return DEFAULT_NODE_SIZE; }
+  virtual int       getNodeInputCount(Node* node) { return 1; }
+  virtual int       getNodeOutputCount(Node* node) { return 1; }
+  virtual void      onNodeDraw(Node* node) { }
+  virtual void      onGraphDraw(Graph* host) { }
+  virtual void      onNodeInspect(Node* node) { }
+  virtual bool      onNodeSelected(Node* node) { return true; }
+  virtual bool      onNodeDoubleClicked(Node* node) { return true; }
+  virtual bool      onNodeMovedTo(Node* node, glm::vec2 const& pos) { return true; }
+  virtual bool      canDeleteNode(Node* node) { return true; }
+  virtual void      beforeDeleteNode(Node* node) { }
+  virtual void      beforeDeleteGraph(Graph* host) { }
+  virtual bool      canLinkTo(Node* source, int srcOutputPin, Node* dest, int destInputPin) { return true; }
+  virtual void      onLinkedTo(Node* source, int srcOutputPin, Node* dest, int destInputPin) { }
+  virtual std::vector<std::string> const& nodeClassList() { return {}; }
+};
 
 } // namespace editorui
