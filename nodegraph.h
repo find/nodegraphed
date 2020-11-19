@@ -11,8 +11,6 @@
 #include <unordered_map>
 #include <vector>
 
-class NodeGraphHook;
-
 namespace editorui {
 struct NodePin
 {
@@ -58,6 +56,78 @@ namespace editorui {
 
 static constexpr glm::vec2 DEFAULT_NODE_SIZE  = {64, 24};
 static constexpr glm::vec4 DEFAULT_NODE_COLOR = {0.6f, 0.6f, 0.6f, 0.8f};
+
+struct Node;
+struct GraphView;
+class Graph;
+
+/// NodeGraphHook - this is the public interface.
+/// implement these functions to bind your own node & graph with the UI graph
+class NodeGraphHook
+{
+public:
+  /// called after the UI graph was saved
+  /// @param host: the graph hosts this hook lives within
+  /// @param jsobj: the json section to write to
+  /// @return: succesfully saved or not
+  virtual bool      save(Graph const* host, nlohmann::json& jsobj) { return false; }
+
+  /// called after the UI graph was loaed
+  /// @param host: the graph hosts this hook lives within
+  /// @param jsobj: the json section to load
+  /// @return: succesfully loaded or not
+  virtual bool      load(Graph *host, nlohmann::json const& jsobj) { return false; }
+
+  /// check if the graph can be created given this host
+  virtual bool      graphCanBeCreated(Graph const* host) { return true; }
+
+  /// creates a new custom graph
+  virtual void*     createGraph(Graph const* host) { return nullptr; }
+
+  /// check if the node of given name can be created
+  virtual bool      nodeCanBeCreated(Graph const* host, std::string const& name) { return true; }
+
+  /// creates a new custom node
+  virtual void*     createNode(Graph* host, std::string const& name) { return nullptr; }
+
+  /// called when trying to change a node's name
+  /// @param node: the UI node hosting logical node
+  /// @param newname: the new node name, can be changed, your change will be the real display name
+  /// @return: true if this rename is acceptable, else false 
+  virtual bool      onNodeNameChanged(Node* node, std::string& newname) { return true; }
+
+  /// just let you know that the UI node color has been changed
+  virtual void      onNodeColorChanged(Node* node, glm::vec4 const& newcolor) { }
+
+  /// your node size
+  virtual glm::vec2 getNodeSize(Node* node) { return DEFAULT_NODE_SIZE; }
+
+  // as the name states ..
+  virtual int       getNodeMinInputCount(Node* node) { return 1; }
+  virtual int       getNodeMaxInputCount(Node* node) { return 4; }
+  virtual int       getNodeOutputCount(Node* node) { return 1; }
+
+  /// called after the default shape has been drawn
+  /// you may draw some kind of overlays there
+  virtual void      onNodeDraw(Node* node, GraphView const& gv) { }
+
+  /// called after the default graph has been drawn
+  /// you may draw some kind of overlays there
+  virtual void      onGraphDraw(Graph* host, GraphView const& gv) { }
+
+  /// called when the UI node has been inspected
+  virtual void      onNodeInspect(Node* node) { }
+
+  virtual bool      onNodeSelected(Node* node) { return true; }
+  virtual bool      onNodeDoubleClicked(Node* node) { return true; }
+  virtual bool      onNodeMovedTo(Node* node, glm::vec2 const& pos) { return true; }
+  virtual bool      canDeleteNode(Node* node) { return true; }
+  virtual void      beforeDeleteNode(Node* node) { }
+  virtual void      beforeDeleteGraph(Graph* host) { }
+  virtual bool      canLinkTo(Node* source, int srcOutputPin, Node* dest, int destInputPin) { return true; }
+  virtual void      onLinkedTo(Node* source, int srcOutputPin, Node* dest, int destInputPin) { }
+  virtual std::vector<std::string> const& nodeClassList() { return {}; }
+};
 
 class NodeIdAllocator
 {
@@ -373,33 +443,5 @@ public:
 
 void updateAndDraw(GraphView& graph, char const* name);
 
-class NodeGraphHook
-{
-public:
-  virtual bool      save(Graph const* host, nlohmann::json& section) { return false; }
-  virtual bool      load(Graph *host, nlohmann::json const& section) { return false; }
-  virtual bool      graphCanBeCreated(Graph const* host) { return true; }
-  virtual void*     createGraph(Graph const* host) { return nullptr; }
-  virtual bool      nodeCanBeCreated(Graph const* host, std::string const& name) { return true; }
-  virtual void*     createNode(Graph* host, std::string const& name) { return nullptr; }
-  virtual void      afterCreate(Graph* host, Node* node) { }
-  virtual bool      onNodeNameChanged(Node* node, std::string& newname) { return true; }
-  virtual void      onNodeColorChanged(Node* node, glm::vec4 const& newcolor) { }
-  virtual glm::vec2 getNodeSize(Node* node) { return DEFAULT_NODE_SIZE; }
-  virtual int       getNodeInputCount(Node* node) { return 1; }
-  virtual int       getNodeOutputCount(Node* node) { return 1; }
-  virtual void      onNodeDraw(Node* node) { }
-  virtual void      onGraphDraw(Graph* host) { }
-  virtual void      onNodeInspect(Node* node) { }
-  virtual bool      onNodeSelected(Node* node) { return true; }
-  virtual bool      onNodeDoubleClicked(Node* node) { return true; }
-  virtual bool      onNodeMovedTo(Node* node, glm::vec2 const& pos) { return true; }
-  virtual bool      canDeleteNode(Node* node) { return true; }
-  virtual void      beforeDeleteNode(Node* node) { }
-  virtual void      beforeDeleteGraph(Graph* host) { }
-  virtual bool      canLinkTo(Node* source, int srcOutputPin, Node* dest, int destInputPin) { return true; }
-  virtual void      onLinkedTo(Node* source, int srcOutputPin, Node* dest, int destInputPin) { }
-  virtual std::vector<std::string> const& nodeClassList() { return {}; }
-};
 
 } // namespace editorui

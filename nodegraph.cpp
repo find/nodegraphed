@@ -42,6 +42,12 @@
 // [ ] window management
 // [ ] grid snapping
 // [ ] config-able appearance
+// [ ] tab menu filter & completion
+// [ ] link swaping
+// [ ] drag link head/tail to empty space creates new node
+// [ ] comment box
+// [ ] group box
+// [ ] anchor node
 
 // helpers {{{
 static inline ImVec2 operator+(const ImVec2& lhs, const ImVec2& rhs)
