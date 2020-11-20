@@ -58,11 +58,7 @@ void init()
   colors[ImGuiCol_NavHighlight] = ImVec4(0.78f, 0.78f, 0.78f, 1.00f);
 
   for (int i = 0; i < 20; ++i) {
-    auto node = editorui::Node{};
-    node.name = "node_" + std::to_string(i);
-    node.pos.y = i*80.f;
-    node.numInputs = i/3;
-    graph.addNode(node);
+    graph.addNode("node_" + std::to_string(i), glm::vec2(0, i*80.f));
   }
   view.graph = &graph;
   view.onGraphChanged();

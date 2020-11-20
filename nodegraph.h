@@ -57,8 +57,8 @@ namespace editorui {
 static constexpr glm::vec2 DEFAULT_NODE_SIZE  = {64, 24};
 static constexpr glm::vec4 DEFAULT_NODE_COLOR = {0.6f, 0.6f, 0.6f, 0.8f};
 
-struct Node;
 struct GraphView;
+class Node;
 class Graph;
 
 /// NodeGraphHook - this is the public interface.
@@ -94,32 +94,33 @@ public:
   /// @param node: the UI node hosting logical node
   /// @param newname: the new node name, can be changed, your change will be the real display name
   /// @return: true if this rename is acceptable, else false 
-  virtual bool      onNodeNameChanged(Node* node, std::string& newname) { return true; }
+  virtual bool      onNodeNameChanged(Node const* node, std::string& newname) { return true; }
 
   /// just let you know that the UI node color has been changed
-  virtual void      onNodeColorChanged(Node* node, glm::vec4 const& newcolor) { }
+  virtual void      onNodeColorChanged(Node const* node, glm::vec4 const& newcolor) { }
 
   /// your node size
-  virtual glm::vec2 getNodeSize(Node* node) { return DEFAULT_NODE_SIZE; }
+  virtual glm::vec2 getNodeSize(Node const* node) { return DEFAULT_NODE_SIZE; }
 
   // as the name states ..
-  virtual int       getNodeMinInputCount(Node* node) { return 1; }
-  virtual int       getNodeMaxInputCount(Node* node) { return 4; }
-  virtual int       getNodeOutputCount(Node* node) { return 1; }
+  virtual int       getNodeMinInputCount(Node const* node) { return 1; }
+  virtual int       getNodeMaxInputCount(Node const* node) { return 4; }
+  virtual int       getNodeOutputCount(Node const* node) { return 1; }
 
   /// called after the default shape has been drawn
   /// you may draw some kind of overlays there
-  virtual void      onNodeDraw(Node* node, GraphView const& gv) { }
+  virtual void      onNodeDraw(Node const* node, GraphView const& gv) { }
 
   /// called after the default graph has been drawn
   /// you may draw some kind of overlays there
-  virtual void      onGraphDraw(Graph* host, GraphView const& gv) { }
+  virtual void      onGraphDraw(Graph const* host, GraphView const& gv) { }
 
   /// called when the UI node has been inspected
-  virtual void      onNodeInspect(Node* node) { }
+  virtual void      onNodeInspect(Node* node, GraphView const& gv) { }
 
-  virtual bool      onNodeSelected(Node* node) { return true; }
-  virtual bool      onNodeDoubleClicked(Node* node) { return true; }
+  virtual bool      onNodeSelected(Node const* node, GraphView const& gv) { return true; }
+  virtual bool      onNodeClicked(Node const* node) { return true; }
+  virtual bool      onNodeDoubleClicked(Node const* node) { return true; }
   virtual bool      onNodeMovedTo(Node* node, glm::vec2 const& pos) { return true; }
   virtual bool      canDeleteNode(Node* node) { return true; }
   virtual void      beforeDeleteNode(Node* node) { }
@@ -141,8 +142,9 @@ public:
   size_t                  newId() { return ++nextId_; }
 };
 
-struct Node
+class Node
 {
+public:
   enum class Type : uint32_t
   {
     NORMAL,     //< normal node
@@ -151,38 +153,113 @@ struct Node
                 //  and infinite number of outputs
     COMMENTBOX, //< comment
     GROUPBOX    //< grouping
-  } type                 = Type::NORMAL;
-  std::string name       = "";
-  int         numInputs  = 1;
-  int         numOutputs = 1;
-  glm::vec2   pos        = {0, 0};
-  glm::vec4   color      = DEFAULT_NODE_COLOR;
-  void*       payload    = nullptr;
-  NodeGraphHook* hook    = nullptr;
+  };
+
+private:
+  friend class Graph;
+  Type type_              = Type::NORMAL;
+  std::string name_       = "";
+  int         numInputs_  = 4;
+  int         numOutputs_ = 1;
+  glm::vec2   pos_        = {0, 0};
+  glm::vec4   color_      = DEFAULT_NODE_COLOR;
+  void*       payload_    = nullptr;
+  NodeGraphHook* hook_    = nullptr;
+
+public:
+  void setHook(NodeGraphHook* hook) { hook_ = hook; }
+
+  std::string const& name() const { return name_; }
+  void setName(std::string name)
+  {
+    if (hook_ ? hook_->onNodeNameChanged(this, name) : true)
+      name_ = std::move(name);
+  }
+
+  glm::vec2 pos() const { return pos_; }
+  void setPos(glm::vec2 const& p)
+  {
+    if (hook_ ? hook_->onNodeMovedTo(this, p) : true)
+      pos_ = p;
+  }
+
+  glm::vec4 color() const { return color_; }
+  void setColor(glm::vec4 const& c)
+  {
+    color_ = c;
+    if (hook_)
+      hook_->onNodeColorChanged(this, c);
+  }
+
+  Type type() const { return type_; }
+
+  int minInputCount() const
+  {
+    if (hook_)
+      return hook_->getNodeMinInputCount(this);
+    return 0;
+  }
+
+  int maxInputCount() const
+  {
+    if (hook_)
+      return hook_->getNodeMaxInputCount(this);
+    return numInputs_;
+  }
+
+  int outputCount() const
+  {
+    if (hook_)
+      return hook_->getNodeOutputCount(this);
+    return numOutputs_;
+  }
 
   glm::vec2 size() const
   {
-    return glm::vec2(std::max<float>(std::max(numInputs, numOutputs) * 10 / 0.9f, DEFAULT_NODE_SIZE.x), DEFAULT_NODE_SIZE.y);
+    if (hook_)
+      return hook_->getNodeSize(this);
+    return glm::vec2(std::max<float>(std::max(maxInputCount(), outputCount()) * 10 / 0.9f, DEFAULT_NODE_SIZE.x), DEFAULT_NODE_SIZE.y);
   }
+
   glm::vec2 inputPinPos(int i) const
   {
-    if (type == Type::NORMAL) {
-      return glm::vec2((size().x * 0.9f) * float(i + 1) / (numInputs + 1) - size().x * 0.45f,
+    if (type() == Type::NORMAL) {
+      return glm::vec2((size().x * 0.9f) * float(i + 1) / (maxInputCount() + 1) - size().x * 0.45f,
                        -size().y / 2.f - 4) +
-             pos;
+             pos();
     } else {
-      return pos;
+      return pos();
     }
   }
+
   glm::vec2 outputPinPos(int i) const
   {
-    if (type == Type::NORMAL) {
-      return glm::vec2((size().x * 0.9f) * float(i + 1) / (numOutputs + 1) - size().x * 0.45f,
+    if (type() == Type::NORMAL) {
+      return glm::vec2((size().x * 0.9f) * float(i + 1) / (outputCount() + 1) - size().x * 0.45f,
                        size().y / 2.f + 4) +
-             pos;
+             pos();
     } else {
-      return pos;
+      return pos();
     }
+  }
+
+  bool onSelected(GraphView const& gv)
+  {
+    if (hook_)
+      return hook_->onNodeSelected(this, gv);
+    return true;
+  }
+
+  void onDraw(GraphView const& gv)
+  {
+    if (hook_)
+      hook_->onNodeDraw(this, gv);
+  }
+
+  void onInspect(GraphView const& gv)
+  {
+    if (hook_)
+      hook_->onNodeInspect(this, gv);
   }
 };
 
@@ -213,7 +290,8 @@ struct GraphView
   } uiState                   = UIState::VIEWING;
   glm::vec2 selectionBoxStart = {0, 0};
   glm::vec2 selectionBoxEnd   = {0, 0};
-  Link      pendingLink = {{NodePin::OUTPUT, size_t(-1), -1}, {NodePin::INPUT, size_t(-1), -1}};
+  Link      pendingLink       = {{NodePin::OUTPUT, size_t(-1), -1}, {NodePin::INPUT, size_t(-1), -1}};
+  std::string pendingNodeName = "node";
   glm::vec2 pendingLinkPos;
   std::vector<glm::vec2> linkCuttingStroke;
 
@@ -236,6 +314,19 @@ protected:
   NodeGraphHook* hook_ = nullptr;
   void* payload_ = nullptr;
 
+  void shiftToEnd(size_t nodeid)
+  {
+    size_t idx = 0;
+    for (; idx < nodeOrder_.size(); ++idx)
+      if (nodeOrder_[idx] == nodeid)
+        break;
+    if (idx < nodeOrder_.size()) {
+      for (size_t i = idx + 1; i < nodeOrder_.size(); ++i) {
+        nodeOrder_[i - 1] = nodeOrder_[i];
+      }
+      nodeOrder_.back() = nodeid;
+    }
+  }
 public:
   auto const& nodes() const { return nodes_; }
   auto const& links() const { return links_; }
@@ -244,14 +335,17 @@ public:
   auto const& viewers() const { return viewers_; }
   auto const& hook() const { return hook_; }
 
-  size_t addNode(Node node)
+  size_t addNode(std::string const& name, glm::vec2 const& pos)
   {
     size_t id = -1;
-    if (hook_ ? hook_->nodeCanBeCreated(this, node.name) : true) {
+    if (hook_ ? hook_->nodeCanBeCreated(this, name) : true) {
       id = NodeIdAllocator::instance().newId();
+      Node node;
+      node.name_ = name;
+      node.pos_ = pos;
       if (hook_)
-        node.payload = hook_->createNode(this, node.name);
-      node.hook = hook_;
+        node.payload_ = hook_->createNode(this, node.name());
+      node.hook_ = hook_;
       nodes_.insert({ id, node });
       nodeOrder_.push_back(id);
     }
@@ -446,28 +540,26 @@ public:
   {
     for (auto idx : indices) {
       auto& node = noderef(idx);
-      node.pos += delta;
-      if (hook_)
-        hook_->onNodeMovedTo(&node, node.pos);
+      node.setPos(node.pos() + delta);
     }
     for (auto idx : indices) {
       updateLinkPath(idx);
     }
   }
 
-  void shiftToEnd(size_t nodeid)
+  void onNodeClicked(size_t nodeid)
   {
-    size_t idx = 0;
-    for (; idx < nodeOrder_.size(); ++idx)
-      if (nodeOrder_[idx] == nodeid)
-        break;
-    if (idx < nodeOrder_.size()) {
-      for (size_t i = idx + 1; i < nodeOrder_.size(); ++i) {
-        nodeOrder_[i - 1] = nodeOrder_[i];
-      }
-      nodeOrder_.back() = nodeid;
-    }
+    shiftToEnd(nodeid);
+    if (hook_)
+      hook_->onNodeClicked(&noderef(nodeid));
   }
+  void onNodeDoubleClicked(size_t nodeid)
+  {
+    shiftToEnd(nodeid);
+    if (hook_)
+      hook_->onNodeDoubleClicked(&noderef(nodeid));
+  }
+
 };
 
 void updateAndDraw(GraphView& graph, char const* name);
