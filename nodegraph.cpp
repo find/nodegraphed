@@ -468,8 +468,10 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
     glm::vec2 curveEnd = gv.graph->noderef(gv.pendingLink.destiny.nodeIndex)
                            .inputPinPos(gv.pendingLink.destiny.pinNumber);
     glm::vec2 curveCenter = glmvec(toLocal * mousePos);
-    drawLink(curveStart, curveCenter);
-    drawLink(curveCenter, curveEnd);
+    if (gv.hoveredPin.type != NodePin::OUTPUT)
+      drawLink(curveStart, curveCenter);
+    if (gv.hoveredPin.type != NodePin::INPUT)
+      drawLink(curveCenter, curveEnd);
   }
 
   // Link cutting stroke

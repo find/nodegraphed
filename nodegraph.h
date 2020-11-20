@@ -285,7 +285,7 @@ public:
     float dx = end.x - start.x;
     float dy = end.y - start.y;
     auto sign = [](float x) { return x > 0 ? 1 : x < 0 ? -1 : 0; };
-    if (dy < 24) {
+    if (dy < 32) {
       if (std::abs(dx) < avoidenceWidth) {
         xcenter += sign(dx) * avoidenceWidth;
       }
@@ -305,7 +305,7 @@ public:
       path.push_back(end);
     } else {
       path.push_back(start);
-      if (dy > abs(dx) + 44) {
+      if (dy > abs(dx)+42) {
         if (dy < 80) {
           path.emplace_back(start.x, ycenter - abs(dx) / 2);
           path.emplace_back(end.x, ycenter + abs(dx) / 2);
@@ -314,17 +314,12 @@ public:
           path.emplace_back(end.x, end.y - 20);
         }
       } else {
-        if (abs(dx)>dy) {
-          path.emplace_back(start.x, start.y+10);
-          path.emplace_back(start.x+sign(dx)*(dy-20)/2, ycenter);
-          path.emplace_back(end.x-sign(dx)*(dy-20)/2, ycenter);
-          path.emplace_back(end.x, end.y-10);
-        } else if (dy>abs(dx)) {
-          // path.emplace_back(start.x, end.y - abs(dx));
-          path.emplace_back(end.x, start.y + abs(dx));
-          // path.emplace_back(start.x, glm::mix(start.y, end.y, 0.33f));
-          // path.emplace_back(end.x, glm::mix(start.y, end.y, 0.67f));
+        path.emplace_back(start.x, start.y+20);
+        if (dy < abs(dx) + 40) {
+          path.emplace_back(start.x + sign(dx)*(dy - 40) / 2, ycenter);
+          path.emplace_back(end.x - sign(dx)*(dy - 40) / 2, ycenter);
         }
+        path.emplace_back(end.x, end.y-20);
       }
       path.push_back(end);
     }
