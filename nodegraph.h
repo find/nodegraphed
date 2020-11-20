@@ -126,6 +126,7 @@ public:
   virtual void      beforeDeleteGraph(Graph* host) { }
   virtual bool      canLinkTo(Node* source, int srcOutputPin, Node* dest, int destInputPin) { return true; }
   virtual void      onLinkedTo(Node* source, int srcOutputPin, Node* dest, int destInputPin) { }
+  virtual void      onLinkDetached(Node* source, int srcOutputPin, Node* dest, int destInputPin) { }
   virtual std::vector<std::string> const& nodeClassList() { return {}; }
 };
 
@@ -157,6 +158,7 @@ struct Node
   glm::vec2   pos        = {0, 0};
   glm::vec4   color      = DEFAULT_NODE_COLOR;
   void*       payload    = nullptr;
+  NodeGraphHook* hook    = nullptr;
 
   glm::vec2 size() const
   {
@@ -242,11 +244,17 @@ public:
   auto const& viewers() const { return viewers_; }
   auto const& hook() const { return hook_; }
 
-  size_t addNode(Node const& node)
+  size_t addNode(Node node)
   {
-    size_t id = NodeIdAllocator::instance().newId();
-    nodes_.insert({id, node});
-    nodeOrder_.push_back(id);
+    size_t id = -1;
+    if (hook_ ? hook_->nodeCanBeCreated(this, node.name) : true) {
+      id = NodeIdAllocator::instance().newId();
+      if (hook_)
+        node.payload = hook_->createNode(this, node.name);
+      node.hook = hook_;
+      nodes_.insert({ id, node });
+      nodeOrder_.push_back(id);
+    }
     return id;
   }
 
@@ -285,8 +293,8 @@ public:
     float dx = end.x - start.x;
     float dy = end.y - start.y;
     auto sign = [](float x) { return x > 0 ? 1 : x < 0 ? -1 : 0; };
-    if (dy < 32) {
-      if (std::abs(dx) < avoidenceWidth) {
+    if (dy < 42) {
+      if (dy < 20 && std::abs(dx) < avoidenceWidth) {
         xcenter += sign(dx) * avoidenceWidth;
       }
       auto endextend = end + glm::vec2(0, -10);
@@ -294,9 +302,9 @@ public:
       
       path.push_back(start);
       path.push_back(start + glm::vec2(0, 10));
-      if (abs(dx) > abs(dy) * 4) {
-        path.emplace_back(xcenter + sign(dx) * dy / 2, path.back().y);
-        path.emplace_back(xcenter - sign(dx) * dy / 2, endextend.y);
+      if (abs(dx) > abs(dy)*2) {
+        path.emplace_back(xcenter - sign(dx*dy) * dy / 2, path.back().y);
+        path.emplace_back(xcenter + sign(dx*dy) * dy / 2, endextend.y);
       } else {
         path.emplace_back(xcenter, path.back().y);
         path.emplace_back(xcenter, endextend.y);
@@ -356,10 +364,15 @@ public:
   void addLink(size_t srcnode, int srcpin, size_t dstnode, int dstpin)
   {
     if (nodes_.find(srcnode) != nodes_.end() && nodes_.find(dstnode) != nodes_.end()) {
-      removeLink(dstnode, dstpin);
-      auto dst = NodePin{ NodePin::INPUT, dstnode, dstpin };
-      links_[dst] = NodePin{ NodePin::OUTPUT, srcnode, srcpin };
-      updateLinkPath(dstnode, dstpin);
+      if (hook_ ? hook_->canLinkTo(&noderef(srcnode), srcpin, &noderef(dstnode), dstpin) : true) {
+        removeLink(dstnode, dstpin);
+        auto dst = NodePin{ NodePin::INPUT, dstnode, dstpin };
+        links_[dst] = NodePin{ NodePin::OUTPUT, srcnode, srcpin };
+        if (hook_) {
+          hook_->onLinkedTo(&noderef(srcnode), srcpin, &noderef(dstnode), dstpin);
+        }
+        updateLinkPath(dstnode, dstpin);
+      }
     }
     notifyViewers();
   }
@@ -367,7 +380,12 @@ public:
   void removeLink(size_t dstnode, int dstpin)
   {
     auto const np = NodePin{ NodePin::INPUT, dstnode, dstpin };
-    links_.erase(np);
+    auto originalSourceItr = links_.find(NodePin{ NodePin::INPUT, dstnode, dstpin });
+    if (originalSourceItr != links_.end()) {
+      if (hook_)
+        hook_->onLinkDetached(&noderef(originalSourceItr->second.nodeIndex), originalSourceItr->second.pinNumber, &noderef(dstnode), dstpin);
+      links_.erase(originalSourceItr);
+    }
     linkPathes_.erase(np);
   }
 
@@ -379,16 +397,23 @@ public:
 
   void removeNode(size_t idx)
   {
-    nodes_.erase(idx);
-    auto itr = std::find(nodeOrder_.begin(), nodeOrder_.end(), idx);
-    nodeOrder_.erase(itr);
     for (auto itr = links_.begin(); itr != links_.end();) {
       if (itr->second.nodeIndex == idx || itr->first.nodeIndex == idx) {
+        if (hook_) {
+          hook_->onLinkDetached(&noderef(itr->second.nodeIndex), itr->second.pinNumber, &noderef(itr->first.nodeIndex), itr->first.pinNumber);
+        }
         itr = links_.erase(itr);
       } else {
         ++itr;
       }
     }
+    if (hook_) {
+      hook_->beforeDeleteNode(&noderef(idx));
+    }
+    nodes_.erase(idx);
+    auto oitr = std::find(nodeOrder_.begin(), nodeOrder_.end(), idx);
+    if (oitr!=nodeOrder_.end())
+      nodeOrder_.erase(oitr);
     notifyViewers();
   }
 
@@ -396,16 +421,22 @@ public:
   void removeNodes(Container const& indices)
   {
     for (auto idx : indices) {
-      nodes_.erase(idx);
-      auto itr = std::find(nodeOrder_.begin(), nodeOrder_.end(), idx);
-      nodeOrder_.erase(itr);
       for (auto itr = links_.begin(); itr != links_.end();) {
         if (itr->second.nodeIndex == idx || itr->first.nodeIndex == idx) {
+          if (hook_)
+            hook_->onLinkDetached(&noderef(itr->second.nodeIndex), itr->second.pinNumber, &noderef(itr->first.nodeIndex), itr->first.pinNumber);
           itr = links_.erase(itr);
         } else {
           ++itr;
         }
       }
+      if (hook_) {
+        hook_->beforeDeleteNode(&noderef(idx));
+      }
+      nodes_.erase(idx);
+      auto oitr = std::find(nodeOrder_.begin(), nodeOrder_.end(), idx);
+      if (oitr!=nodeOrder_.end())
+        nodeOrder_.erase(oitr);
     }
     notifyViewers();
   }
@@ -414,7 +445,10 @@ public:
   void moveNodes(Container const& indices, glm::vec2 const& delta)
   {
     for (auto idx : indices) {
-      noderef(idx).pos += delta;
+      auto& node = noderef(idx);
+      node.pos += delta;
+      if (hook_)
+        hook_->onNodeMovedTo(&node, node.pos);
     }
     for (auto idx : indices) {
       updateLinkPath(idx);
