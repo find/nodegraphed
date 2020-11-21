@@ -603,10 +603,11 @@ public:
 
   std::vector<std::string> const& getNodeClassList() const
   {
+    static std::vector<std::string> emptyList = {};
     if (hook_)
       return hook_->nodeClassList();
     else
-      return {};
+      return emptyList;
   }
 };
 
