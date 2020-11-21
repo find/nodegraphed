@@ -587,21 +587,25 @@ void updateNetworkView(GraphView& gv, char const* name)
   glm::mat3 const toCanvas = calcLocalToCanvasMatrix();
   glm::mat3 const toLocal  = glm::inverse(toCanvas);
 
-  size_t  hoveredNode                       = -1;
-  size_t  clickedNode                       = -1;
-  NodePin hoveredPin                        = {NodePin::NONE, size_t(-1), -1},
-          clickedPin                        = {NodePin::NONE, size_t(-1), -1};
+  size_t  hoveredNode = -1;
+  size_t  clickedNode = -1;
+  NodePin hoveredPin  = {NodePin::NONE, size_t(-1), -1},
+          clickedPin  = {NodePin::NONE, size_t(-1), -1};
+  gv.selectionBoxEnd  = glm::vec2(mousePos.x, mousePos.y);
+
   std::set<size_t> unconfirmedNodeSelection = gv.nodeSelection;
-  gv.selectionBoxEnd                        = glm::vec2(mousePos.x, mousePos.y);
   AABB<ImVec2> selectionBox(imvec(gv.selectionBoxStart), imvec(gv.selectionBoxEnd));
 
+  // Check hovering node & pin
   for (size_t i = 0; i < graph.order().size(); ++i) {
-    size_t const idx         = graph.order()[i];
-    auto const&  node        = graph.nodes().at(idx);
-    auto const   center      = toCanvas * glm::vec3(node.pos(), 1.0f);
-    auto const   size        = node.size();
-    ImVec2 const topleft     = {center.x - size.x / 2.f * canvasScale,
+    size_t const idx     = graph.order()[i];
+    auto const&  node    = graph.nodes().at(idx);
+    auto const   center  = toCanvas * glm::vec3(node.pos(), 1.0f);
+    auto const   size    = node.size();
+
+    ImVec2 const topleft = {center.x - size.x / 2.f * canvasScale,
                             center.y - size.y / 2.f * canvasScale};
+
     ImVec2 const bottomright = {center.x + size.x / 2.f * canvasScale,
                                 center.y + size.y / 2.f * canvasScale};
 
@@ -822,6 +826,8 @@ void updateNetworkView(GraphView& gv, char const* name)
       gv.linkCuttingStroke.push_back(glm::vec2(mp.x, mp.y));
     }
   }
+  
+  // Reset states on mouse release
   if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
     // confirm node selection
     if (gv.uiState == GraphView::UIState::BOX_SELECTING ||

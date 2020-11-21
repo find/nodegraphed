@@ -119,6 +119,7 @@ public:
   virtual void onNodeInspect(Node* node, GraphView const& gv) {}
 
   virtual bool onNodeSelected(Node const* node, GraphView const& gv) { return true; }
+  virtual void onNodeDeselected(Node const* node, GraphView const& gv) { }
   virtual bool onNodeClicked(Node const* node) { return true; }
   virtual bool onNodeDoubleClicked(Node const* node) { return true; }
   virtual bool onNodeMovedTo(Node* node, glm::vec2 const& pos) { return true; }
@@ -173,21 +174,24 @@ public:
   void setHook(NodeGraphHook* hook) { hook_ = hook; }
 
   std::string const& name() const { return name_; }
-  void               setName(std::string name)
+
+  void setName(std::string name)
   {
     if (hook_ ? hook_->onNodeNameChanged(this, name) : true)
       name_ = std::move(name);
   }
 
   glm::vec2 pos() const { return pos_; }
-  void      setPos(glm::vec2 const& p)
+
+  void setPos(glm::vec2 const& p)
   {
     if (hook_ ? hook_->onNodeMovedTo(this, p) : true)
       pos_ = p;
   }
 
   glm::vec4 color() const { return color_; }
-  void      setColor(glm::vec4 const& c)
+
+  void setColor(glm::vec4 const& c)
   {
     color_ = c;
     if (hook_)
@@ -255,6 +259,12 @@ public:
     return true;
   }
 
+  void onDeselected(GraphView const& gv)
+  {
+    if (hook_)
+      hook_->onNodeDeselected(this, gv);
+  }
+
   void onDraw(GraphView const& gv)
   {
     if (hook_)
@@ -272,15 +282,6 @@ class Graph;
 
 struct GraphView
 {
-  glm::vec2        canvasOffset = {0, 0};
-  float            canvasScale  = 1;
-  bool             drawGrid     = true;
-  bool             drawName     = true;
-  size_t           hoveredNode  = -1;
-  size_t           activeNode   = -1;
-  NodePin          hoveredPin   = {NodePin::NONE, size_t(-1), -1};
-  NodePin          activePin    = {NodePin::NONE, size_t(-1), -1};
-  std::set<size_t> nodeSelection;
   enum class UIState : uint8_t
   {
     VIEWING,
@@ -292,13 +293,26 @@ struct GraphView
     DRAGGING_LINK_BODY,
     DRAGGING_LINK_TAIL,
     CUTING_LINK,
-  } uiState                     = UIState::VIEWING;
+  };
+
+  glm::vec2 canvasOffset = {0, 0};
+  float     canvasScale  = 1;
+  bool      drawGrid     = true;
+  bool      drawName     = true;
+  size_t    hoveredNode  = -1;
+  size_t    activeNode   = -1;
+  NodePin   hoveredPin   = {NodePin::NONE, size_t(-1), -1};
+  NodePin   activePin    = {NodePin::NONE, size_t(-1), -1};
+
+  UIState     uiState           = UIState::VIEWING;
   glm::vec2   selectionBoxStart = {0, 0};
   glm::vec2   selectionBoxEnd   = {0, 0};
   Link        pendingLink = {{NodePin::OUTPUT, size_t(-1), -1}, {NodePin::INPUT, size_t(-1), -1}};
   std::string pendingNodeName = "node";
-  glm::vec2   pendingLinkPos;
+
+  glm::vec2 pendingLinkPos;
   std::vector<glm::vec2> linkCuttingStroke;
+  std::set<size_t> nodeSelection;
 
   Graph* graph = nullptr;
 
@@ -387,11 +401,13 @@ public:
                                      float            avoidenceWidth = DEFAULT_NODE_SIZE.x)
   {
     std::vector<glm::vec2> path;
-    float                  xcenter = (start.x + end.x) * 0.5f;
-    float                  ycenter = (start.y + end.y) * 0.5f;
-    float                  dx      = end.x - start.x;
-    float                  dy      = end.y - start.y;
-    auto                   sign    = [](float x) { return x > 0 ? 1 : x < 0 ? -1 : 0; };
+
+    float xcenter = (start.x + end.x) * 0.5f;
+    float ycenter = (start.y + end.y) * 0.5f;
+    float dx      = end.x - start.x;
+    float dy      = end.y - start.y;
+    auto  sign    = [](float x) { return x > 0 ? 1 : x < 0 ? -1 : 0; };
+
     if (dy < 42) {
       if (dy < 20 && std::abs(dx) < avoidenceWidth) {
         xcenter += sign(dx) * avoidenceWidth;
