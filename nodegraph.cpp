@@ -284,6 +284,8 @@ void updateInspectorView(GraphView& gv, char const* name)
     auto color = node.color();
     if (ImGui::ColorEdit4("Color", &color.r, ImGuiColorEditFlags_PickerHueWheel))
       node.setColor(color);
+
+    node.onInspect(gv);
   } else {
     glm::vec4 avgColor = {0, 0, 0, 0};
     for (auto id : gv.nodeSelection) {
@@ -295,6 +297,8 @@ void updateInspectorView(GraphView& gv, char const* name)
         gv.graph->noderef(id).setColor(avgColor);
       }
     }
+
+    // TODO: multi-editing
   }
 
   ImGui::End();
@@ -434,6 +438,8 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
                           imcolor(highlight(color, -0.8f, 0.6f, 0.6f)),
                           node.name().c_str());
       }
+
+      node.onDraw(gv);
     } else if (node.type() == Node::Type::ANCHOR) {
       drawList->AddCircleFilled(imvec(center), 8, imcolor(color));
     }

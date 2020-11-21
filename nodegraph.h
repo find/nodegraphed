@@ -130,7 +130,7 @@ public:
   {
     return true;
   }
-  virtual void onLinkedTo(Node* source, int srcOutputPin, Node* dest, int destInputPin) {}
+  virtual void onLinkAttached(Node* source, int srcOutputPin, Node* dest, int destInputPin) {}
   virtual void onLinkDetached(Node* source, int srcOutputPin, Node* dest, int destInputPin) {}
   virtual std::vector<std::string> const& nodeClassList() { return {}; }
 };
@@ -172,6 +172,10 @@ private:
 
 public:
   void setHook(NodeGraphHook* hook) { hook_ = hook; }
+
+  void setPayload(void* payload) { payload_ = payload; }
+
+  void* payload() const { return payload_; }
 
   std::string const& name() const { return name_; }
 
@@ -265,7 +269,7 @@ public:
       hook_->onNodeDeselected(this, gv);
   }
 
-  void onDraw(GraphView const& gv)
+  void onDraw(GraphView const& gv) const
   {
     if (hook_)
       hook_->onNodeDraw(this, gv);
@@ -353,7 +357,14 @@ public:
   auto const& linkPathes() const { return linkPathes_; }
   auto const& order() const { return nodeOrder_; }
   auto const& viewers() const { return viewers_; }
-  auto const& hook() const { return hook_; }
+
+  auto* hook() const { return hook_; }
+
+  void setHook(NodeGraphHook* hook) { hook_ = hook; }
+
+  void* payload() const { return payload_; }
+
+  void setPayload(void* payload) { payload_ = payload; }
 
   size_t addNode(std::string const& name, glm::vec2 const& pos)
   {
@@ -361,11 +372,14 @@ public:
     if (hook_ ? hook_->nodeCanBeCreated(this, name) : true) {
       id = NodeIdAllocator::instance().newId();
       Node node;
-      node.name_ = name;
-      node.pos_  = pos;
-      if (hook_)
-        node.payload_ = hook_->createNode(this, node.name());
+      if (hook_ && hook_->nodeCanBeCreated(this, name)) {
+        node.setName(name);
+        node.setPayload(hook_->createNode(this, node.name()));
+      } else {
+        node.name_ = name;
+      }
       node.hook_ = hook_;
+      node.pos_  = pos;
       nodes_.insert({id, node});
       nodeOrder_.push_back(id);
     }
@@ -482,7 +496,7 @@ public:
         auto dst    = NodePin{NodePin::INPUT, dstnode, dstpin};
         links_[dst] = NodePin{NodePin::OUTPUT, srcnode, srcpin};
         if (hook_) {
-          hook_->onLinkedTo(&noderef(srcnode), srcpin, &noderef(dstnode), dstpin);
+          hook_->onLinkAttached(&noderef(srcnode), srcpin, &noderef(dstnode), dstpin);
         }
         updateLinkPath(dstnode, dstpin);
       }
