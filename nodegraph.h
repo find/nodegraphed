@@ -311,8 +311,8 @@ struct GraphView
   UIState     uiState           = UIState::VIEWING;
   glm::vec2   selectionBoxStart = {0, 0};
   glm::vec2   selectionBoxEnd   = {0, 0};
-  Link        pendingLink = {{NodePin::OUTPUT, size_t(-1), -1}, {NodePin::INPUT, size_t(-1), -1}};
-  std::string pendingNodeName = "node";
+  Link        pendingLink       = {{NodePin::OUTPUT, size_t(-1), -1}, {NodePin::INPUT, size_t(-1), -1}};
+  std::string pendingNodeClass  = "node";
 
   glm::vec2 pendingLinkPos;
   std::vector<glm::vec2> linkCuttingStroke;
@@ -401,8 +401,6 @@ public:
     if (view)
       viewers_.erase(view);
   }
-
-  void setHook(NodeGraphHook* hook) { hook_ = hook; }
 
   void notifyViewers()
   {
@@ -595,11 +593,20 @@ public:
     if (hook_)
       hook_->onNodeClicked(&noderef(nodeid));
   }
+
   void onNodeDoubleClicked(size_t nodeid)
   {
     shiftToEnd(nodeid);
     if (hook_)
       hook_->onNodeDoubleClicked(&noderef(nodeid));
+  }
+
+  std::vector<std::string> const& getNodeClassList() const
+  {
+    if (hook_)
+      return hook_->nodeClassList();
+    else
+      return {};
   }
 };
 

@@ -224,6 +224,19 @@ static float pointSegmentDistance(Vec2 const& pt,
     *outClosestPoint = closept;
   return length(diff);
 }
+
+static ptrdiff_t editDistanceLCS(std::string const& from, std::string const& to)
+{
+  std::vector<ptrdiff_t> buf1(to.length()+1, 0);
+  std::vector<ptrdiff_t> buf2(to.length()+1, 0);
+  for (size_t i=1; i<to.length(); ++i) {
+    for (size_t j=1, n=std::min(from.length(), to.length()); j<n; ++j) {
+      buf2[j] = (from[j] == to[i] ? buf1[j-1]+1 : std::max(buf1[j], buf2[j - 1]));
+    }
+    buf1.swap(buf2);
+  }
+  return to.length()-buf1.back();
+}
 // helpers }}}
 
 namespace editorui {
@@ -500,26 +513,33 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
 
 void updateContextMenu(GraphView& gv)
 {
-  static char nodetype[512] = {0};
+  static char nodeClass[512] = {0};
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 8));
   ImGui::SetNextWindowSizeConstraints(ImVec2(200, 100), ImVec2(800, 1024));
+
   if (ImGui::BeginPopup("Create Node")) {
-    memset(nodetype, 0, sizeof(nodetype));
+    auto confirmNodeClass = [&gv](char const* nodeClass) {
+      gv.uiState = GraphView::UIState::PLACING_NEW_NODE;
+      gv.pendingNodeClass = nodeClass;
+      ImGui::CloseCurrentPopup();
+    };
+    auto const& classList = gv.graph->getNodeClassList();
+    std::map<int, std::string> orderedMatches; // edit distance -> string
+
+    // TODO: fill orderedMatches
+
+    memset(nodeClass, 0, sizeof(nodeClass));
     ImGui::SetKeyboardFocusHere(0);
     ImGui::PushItemWidth(-1);
     if (ImGui::InputText(
-            "##nodetype", nodetype, sizeof(nodetype), ImGuiInputTextFlags_EnterReturnsTrue)) {
-      gv.uiState         = GraphView::UIState::PLACING_NEW_NODE;
-      gv.pendingNodeName = nodetype;
-      ImGui::CloseCurrentPopup();
+            "##nodeClass", nodeClass, sizeof(nodeClass), ImGuiInputTextFlags_EnterReturnsTrue)) {
+      confirmNodeClass(nodeClass);
     }
     if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape)))
       ImGui::CloseCurrentPopup();
     ImGui::Separator();
-    if (ImGui::MenuItem(nodetype, nullptr)) {
-      gv.uiState         = GraphView::UIState::PLACING_NEW_NODE;
-      gv.pendingNodeName = nodetype;
-      ImGui::CloseCurrentPopup();
+    if (ImGui::MenuItem(nodeClass, nullptr)) {
+      confirmNodeClass(nodeClass);
     }
     ImGui::PopItemWidth();
     ImGui::EndPopup();
@@ -726,7 +746,7 @@ void updateNetworkView(GraphView& gv, char const* name)
         }
       } else if (gv.uiState == GraphView::UIState::PLACING_NEW_NODE) {
         auto   pos       = toLocal * mousePos;
-        size_t idx       = graph.addNode(gv.pendingNodeName, glm::vec2(pos.x, pos.y));
+        size_t idx       = graph.addNode(gv.pendingNodeClass, glm::vec2(pos.x, pos.y));
         gv.activeNode    = idx;
         gv.nodeSelection = {idx};
       } else if (gv.uiState == GraphView::UIState::DRAGGING_LINK_HEAD) {
