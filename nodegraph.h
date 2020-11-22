@@ -132,7 +132,7 @@ public:
   }
   virtual void onLinkAttached(Node* source, int srcOutputPin, Node* dest, int destInputPin) {}
   virtual void onLinkDetached(Node* source, int srcOutputPin, Node* dest, int destInputPin) {}
-  virtual std::vector<std::string> const& nodeClassList() { return {}; }
+  virtual std::vector<std::string> const& nodeClassList() { static std::vector<std::string> emptyList = {}; return emptyList; }
 };
 
 class NodeIdAllocator
