@@ -329,13 +329,14 @@ protected:
   std::unordered_map<size_t, Node> nodes_;
   // std::vector<Link> links_;
   std::unordered_map<NodePin, NodePin>
-      links_; // map from destiny to source, because each input pin accepts only one source, but
-              // each output pin can be linked to many input pins
-  std::unordered_map<NodePin, std::vector<glm::vec2>> linkPathes_; // cached link pathes
-  std::vector<size_t>                                 nodeOrder_;
-  std::set<GraphView*>                                viewers_;
-  NodeGraphHook*                                      hook_    = nullptr;
-  void*                                               payload_ = nullptr;
+      links_; // map from destiny to source, because each input pin accepts one
+              // source only, but each output pin can be linked to many input pins
+  std::unordered_map<NodePin, std::vector<glm::vec2>>
+      linkPathes_; // cached link pathes
+  std::vector<size_t>  nodeOrder_;
+  std::set<GraphView*> viewers_;
+  NodeGraphHook*       hook_    = nullptr;
+  void*                payload_ = nullptr;
 
   void shiftToEnd(size_t nodeid)
   {
@@ -525,6 +526,8 @@ public:
 
   void removeNode(size_t idx)
   {
+    if (hook_ && !hook_->canDeleteNode(&noderef(idx)))
+      return;
     for (auto itr = links_.begin(); itr != links_.end();) {
       if (itr->second.nodeIndex == idx || itr->first.nodeIndex == idx) {
         if (hook_) {
@@ -552,6 +555,8 @@ public:
   void removeNodes(Container const& indices)
   {
     for (auto idx : indices) {
+      if (hook_ && !hook_->canDeleteNode(&noderef(idx)))
+        continue;
       for (auto itr = links_.begin(); itr != links_.end();) {
         if (itr->second.nodeIndex == idx || itr->first.nodeIndex == idx) {
           if (hook_)
