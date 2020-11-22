@@ -15,9 +15,30 @@
 
 namespace app {
 
+class CustomHook : public editorui::NodeGraphHook
+{
+  std::vector<std::string> const& nodeClassList() override {
+    static std::vector<std::string> clsList = {
+      "hello",
+      "world",
+      "foo",
+      "bar",
+      "blahblah",
+      "read_csv",
+      "write_csv",
+      "output",
+      "join",
+      "split",
+      "filter"
+    };
+    return clsList;
+  }
+};
+
 editorui::Graph graph;
 editorui::GraphView view;
 editorui::GraphView view2;
+CustomHook hook;
 
 void init()
 {
@@ -66,6 +87,7 @@ void init()
   view2.graph = &graph;
   view2.onGraphChanged();
 
+  graph.setHook(&hook);
   graph.addViewer(&view);
   graph.addViewer(&view2);
 }

@@ -42,7 +42,7 @@
 // [ ] window management
 // [ ] grid snapping
 // [ ] config-able appearance
-// [ ] tab menu filter & completion
+// [X] tab menu filter & completion
 // [ ] link swaping
 // [ ] drag link head/tail to empty space creates new node
 // [ ] comment box
@@ -225,17 +225,19 @@ static float pointSegmentDistance(Vec2 const& pt,
   return length(diff);
 }
 
-static ptrdiff_t editDistanceLCS(std::string const& from, std::string const& to)
+static ptrdiff_t editDistanceLCS(std::string const& a, std::string const& b)
 {
-  std::vector<ptrdiff_t> buf1(to.length()+1, 0);
-  std::vector<ptrdiff_t> buf2(to.length()+1, 0);
-  for (size_t i=1; i<to.length(); ++i) {
-    for (size_t j=1, n=std::min(from.length(), to.length()); j<n; ++j) {
-      buf2[j] = (from[j] == to[i] ? buf1[j-1]+1 : std::max(buf1[j], buf2[j - 1]));
+  std::string const& from = a.length() > b.length() ? b : a;
+  std::string const& to = a.length() > b.length() ? a : b;
+  std::vector<ptrdiff_t> buf1(from.length()+1, 0);
+  std::vector<ptrdiff_t> buf2(from.length()+1, 0);
+  for (size_t i=1; i<=to.length(); ++i) {
+    for (size_t j=1, n=from.length(); j<=n; ++j) {
+      buf2[j] = (from[j-1] == to[i-1] ? buf1[j-1]+1 : std::max(buf1[j], buf2[j - 1]));
     }
     buf1.swap(buf2);
   }
-  return to.length()-buf1.back();
+  return buf1.back();
 }
 // helpers }}}
 
@@ -348,7 +350,7 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
   ImDrawList* drawList = ImGui::GetWindowDrawList();
 
   // Grid
-  float const GRID_SZ    = 24.0f;
+  float const GRID_SZ    = 32.0f;
   ImU32 const GRID_COLOR = IM_COL32(80, 80, 80, 40);
   if (gv.drawGrid && GRID_SZ * canvasScale >= 8.f) {
     auto gridOffset = toCanvas * glm::vec3(0, 0, 1);
@@ -518,28 +520,33 @@ void updateContextMenu(GraphView& gv)
   ImGui::SetNextWindowSizeConstraints(ImVec2(200, 100), ImVec2(800, 1024));
 
   if (ImGui::BeginPopup("Create Node")) {
-    auto confirmNodeClass = [&gv](char const* nodeClass) {
+    auto confirmNodeClass = [&gv](std::string const& nodeClass) {
       gv.uiState = GraphView::UIState::PLACING_NEW_NODE;
       gv.pendingNodeClass = nodeClass;
       ImGui::CloseCurrentPopup();
     };
     auto const& classList = gv.graph->getNodeClassList();
-    std::map<int, std::string> orderedMatches; // edit distance -> string
-
-    // TODO: fill orderedMatches
-
+    std::multimap<ptrdiff_t, std::string> orderedMatches; // edit distance -> string
+   
     memset(nodeClass, 0, sizeof(nodeClass));
     ImGui::SetKeyboardFocusHere(0);
     ImGui::PushItemWidth(-1);
-    if (ImGui::InputText(
-            "##nodeClass", nodeClass, sizeof(nodeClass), ImGuiInputTextFlags_EnterReturnsTrue)) {
-      confirmNodeClass(nodeClass);
-    }
+    bool confirmed = ImGui::InputText(
+      "##nodeClass", nodeClass, sizeof(nodeClass), ImGuiInputTextFlags_EnterReturnsTrue);
     if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape)))
       ImGui::CloseCurrentPopup();
     ImGui::Separator();
-    if (ImGui::MenuItem(nodeClass, nullptr)) {
-      confirmNodeClass(nodeClass);
+    if (nodeClass[0] != 0) {
+      for (auto const& clsname : classList) {
+        orderedMatches.insert({ editDistanceLCS(nodeClass, clsname), clsname });
+      }
+      if (confirmed && !orderedMatches.empty())
+        confirmNodeClass((++orderedMatches.rend())->second);
+    }
+    for (auto itr = orderedMatches.rbegin(); itr != orderedMatches.rend(); ++itr) {
+      if (ImGui::MenuItem(itr->second.c_str(), nullptr)) {
+        confirmNodeClass(itr->second);
+      }
     }
     ImGui::PopItemWidth();
     ImGui::EndPopup();
