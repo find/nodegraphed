@@ -19,7 +19,7 @@
 // --------------------------------------------------------------------
 //                        T O D O   L I S T :
 // --------------------------------------------------------------------
-// [ ] host real(logical) nodes & graphs
+// [~] host real(logical) nodes & graphs
 // [ ] dive in nested network
 // [ ] serialization
 // [~] edit common params in inspector when multiple nodes are selected
@@ -32,7 +32,7 @@
 // [X] drag link body to re-route
 // [X] highlight hovering pin
 // [X] optimize link routing
-// [ ] focus to selected nodes / frame all nodes
+// [X] focus to selected nodes / frame all nodes
 // [ ] copy / paste
 // [ ] undo / redo / edit history tree
 // [ ] node shape
@@ -44,6 +44,7 @@
 // [ ] config-able appearance
 // [X] tab menu filter & completion
 // [ ] link swaping
+// [ ] node swaping
 // [ ] drag link head/tail to empty space creates new node
 // [ ] comment box
 // [ ] group box
@@ -341,7 +342,7 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
     glm::mat3 translateMat = glm::translate(glm::identity<glm::mat3>(), gv.canvasOffset);
     glm::mat3 windowTranslate =
         glm::translate(glm::identity<glm::mat3>(),
-                       glm::vec2(winPos.x + canvasSize.x / 2, winPos.y + canvasSize.y / 4));
+                       glm::vec2(winPos.x + canvasSize.x / 2, winPos.y + canvasSize.y / 2));
     return windowTranslate * scaleMat * translateMat;
   };
   glm::mat3 const toCanvas = calcLocalToCanvasMatrix();
@@ -554,6 +555,20 @@ void updateContextMenu(GraphView& gv)
   ImGui::PopStyleVar();
 }
 
+static void focusSelected(GraphView& gv)
+{
+  if (!gv.nodeSelection.empty()) {
+    auto itr = gv.nodeSelection.begin();
+    AABB<glm::vec2> aabb(gv.graph->noderef(*itr).pos());
+    for (++itr; itr!=gv.nodeSelection.end(); ++itr) {
+      aabb.merge(gv.graph->noderef(*itr).pos());
+    }
+
+    gv.canvasOffset = -glm::vec2((aabb.min.x + aabb.max.x) / 2.f, (aabb.min.y + aabb.max.y) / 2.f);
+    gv.canvasScale = 1.f;
+  }
+}
+
 void updateNetworkView(GraphView& gv, char const* name)
 {
   ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
@@ -614,7 +629,7 @@ void updateNetworkView(GraphView& gv, char const* name)
     glm::mat3 translateMat = glm::translate(glm::identity<glm::mat3>(), canvasOffset);
     glm::mat3 windowTranslate =
         glm::translate(glm::identity<glm::mat3>(),
-                       glm::vec2(winPos.x + canvasSize.x / 2, winPos.y + canvasSize.y / 4));
+                       glm::vec2(winPos.x + canvasSize.x / 2, winPos.y + canvasSize.y / 2));
     return windowTranslate * scaleMat * translateMat;
   };
   glm::mat3 const toCanvas = calcLocalToCanvasMatrix();
@@ -839,6 +854,8 @@ void updateNetworkView(GraphView& gv, char const* name)
     } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape)) &&
                gv.uiState == GraphView::UIState::PLACING_NEW_NODE) {
       gv.uiState = GraphView::UIState::VIEWING;
+    } else if (ImGui::IsKeyPressed('F')) {
+      focusSelected(gv);
     }
   } // Mouse inside canvas?
 
