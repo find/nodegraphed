@@ -84,11 +84,12 @@ public:
   /// creates a new custom graph
   virtual void* createGraph(Graph const* host) { return nullptr; }
 
-  /// check if the node of given name can be created
-  virtual bool nodeCanBeCreated(Graph const* host, std::string const& name) { return true; }
+  /// check if the node of given type and name can be created
+  /// name may be changed to suggested
+  virtual bool prepareNodeCreation(Graph* host, std::string const& type, std::string& name) { return true; }
 
-  /// creates a new custom node
-  virtual void* createNode(Graph* host, std::string const& name) { return nullptr; }
+  /// creates a new custom node of given type and name
+  virtual void* createNode(Graph* host, std::string const& type, std::string const& name) { return nullptr; }
 
   /// called when trying to change a node's name
   /// @param node: the UI node hosting logical node
@@ -123,7 +124,7 @@ public:
   virtual bool onNodeClicked(Node const* node) { return true; }
   virtual bool onNodeDoubleClicked(Node const* node) { return true; }
   virtual bool onNodeMovedTo(Node* node, glm::vec2 const& pos) { return true; }
-  virtual bool canDeleteNode(Node* node) { return true; }
+  virtual bool nodeCanBeDeleted(Node* node) { return true; }
   virtual void beforeDeleteNode(Node* node) {}
   virtual void beforeDeleteGraph(Graph* host) {}
   virtual bool canLinkTo(Node* source, int srcOutputPin, Node* dest, int destInputPin)
@@ -367,20 +368,17 @@ public:
 
   void setPayload(void* payload) { payload_ = payload; }
 
-  size_t addNode(std::string const& name, glm::vec2 const& pos)
+  size_t addNode(std::string const& type, glm::vec2 const& pos)
   {
     size_t id = -1;
-    if (hook_ ? hook_->nodeCanBeCreated(this, name) : true) {
+    std::string name = type;
+    if (hook_ ? hook_->prepareNodeCreation(this, type, name) : true) {
       id = NodeIdAllocator::instance().newId();
       Node node;
-      if (hook_ && hook_->nodeCanBeCreated(this, name)) {
-        node.setName(name);
-        node.setPayload(hook_->createNode(this, node.name()));
-      } else {
-        node.name_ = name;
-      }
-      node.hook_ = hook_;
+      node.name_ = name;
       node.pos_  = pos;
+      node.hook_ = hook_;
+      node.setPayload(hook_ ? hook_->createNode(this, type, name) : nullptr);
       nodes_.insert({id, node});
       nodeOrder_.push_back(id);
     }
@@ -526,7 +524,7 @@ public:
 
   void removeNode(size_t idx)
   {
-    if (hook_ && !hook_->canDeleteNode(&noderef(idx)))
+    if (hook_ && !hook_->nodeCanBeDeleted(&noderef(idx)))
       return;
     for (auto itr = links_.begin(); itr != links_.end();) {
       if (itr->second.nodeIndex == idx || itr->first.nodeIndex == idx) {
@@ -555,7 +553,7 @@ public:
   void removeNodes(Container const& indices)
   {
     for (auto idx : indices) {
-      if (hook_ && !hook_->canDeleteNode(&noderef(idx)))
+      if (hook_ && !hook_->nodeCanBeDeleted(&noderef(idx)))
         continue;
       for (auto itr = links_.begin(); itr != links_.end();) {
         if (itr->second.nodeIndex == idx || itr->first.nodeIndex == idx) {

@@ -15,8 +15,16 @@
 
 namespace app {
 
-class CustomHook : public editorui::NodeGraphHook
+class MyTestHook : public editorui::NodeGraphHook
 {
+  static std::map<std::string, int> typeNumericSuffix;
+
+  struct RealNode
+  {
+    std::string type;
+    std::string name;
+  };
+
   std::vector<std::string> const& nodeClassList() override {
     static std::vector<std::string> clsList = {
       "hello",
@@ -33,12 +41,36 @@ class CustomHook : public editorui::NodeGraphHook
     };
     return clsList;
   }
+
+  bool prepareNodeCreation(editorui::Graph* parent, std::string const& type, std::string& name) override
+  {
+    name = type + '_' + std::to_string(++typeNumericSuffix[type]);
+    return true;
+  }
+
+  void* createNode(editorui::Graph* parent, std::string const& type, std::string const& name) override
+  {
+    return new RealNode{ type, name };
+  }
+
+  void beforeDeleteNode(editorui::Node* node) override
+  {
+    delete static_cast<RealNode*>(node->payload());
+  }
+
+  int getNodeOutputCount(editorui::Node const* node) override {
+    if (static_cast<RealNode const*>(node->payload())->type == "split")
+      return 2;
+    else
+      return 1;
+  }
 };
+std::map<std::string, int> MyTestHook::typeNumericSuffix;
 
 editorui::Graph graph;
 editorui::GraphView view;
 editorui::GraphView view2;
-CustomHook hook;
+MyTestHook hook;
 
 void init()
 {
@@ -78,8 +110,9 @@ void init()
   colors[ImGuiCol_TextSelectedBg] = ImVec4(1.00f, 1.00f, 1.00f, 0.35f);
   colors[ImGuiCol_NavHighlight] = ImVec4(0.78f, 0.78f, 0.78f, 1.00f);
 
+  graph.setHook(&hook);
   for (int i = 0; i < 20; ++i) {
-    graph.addNode("node_" + std::to_string(i), glm::vec2(0, i*80.f));
+    graph.addNode("node", glm::vec2(0, i*80.f));
   }
   view.graph = &graph;
   view.onGraphChanged();
@@ -87,7 +120,6 @@ void init()
   view2.graph = &graph;
   view2.onGraphChanged();
 
-  graph.setHook(&hook);
   graph.addViewer(&view);
   graph.addViewer(&view2);
 }

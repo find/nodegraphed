@@ -604,6 +604,28 @@ static void focusSelected(GraphView& gv)
   }
 }
 
+static void confirmNewNodePlacing(GraphView& gv, ImVec2 const& pos)
+{
+  size_t idx = gv.graph->addNode(gv.pendingNodeClass, glm::vec2(pos.x, pos.y));
+  gv.activeNode = idx;
+  gv.nodeSelection = { idx };
+
+  if (gv.pendingLink.source.type == NodePin::OUTPUT &&
+    gv.pendingLink.source.nodeIndex != -1 &&
+    gv.pendingLink.source.pinNumber >= 0 &&
+    gv.graph->noderef(idx).maxInputCount() > 0) {
+    gv.graph->addLink(gv.pendingLink.source.nodeIndex, gv.pendingLink.source.pinNumber, idx, 0);
+  }
+  if (gv.pendingLink.destiny.type == NodePin::INPUT &&
+    gv.pendingLink.destiny.nodeIndex != -1 &&
+    gv.pendingLink.destiny.pinNumber >= 0 &&
+    gv.graph->noderef(idx).outputCount() > 0) {
+    gv.graph->addLink(idx, 0, gv.pendingLink.destiny.nodeIndex, gv.pendingLink.destiny.pinNumber);
+  }
+  gv.pendingLink = {};
+  gv.uiState = GraphView::UIState::VIEWING;
+}
+
 void updateNetworkView(GraphView& gv, char const* name)
 {
   ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
@@ -781,6 +803,10 @@ void updateNetworkView(GraphView& gv, char const* name)
         }
       }
     }
+    if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+      if (clickedNode != -1)
+        graph.onNodeDoubleClicked(clickedNode);
+    }
     if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
       if (gv.uiState == GraphView::UIState::BOX_SELECTING ||
           gv.uiState == GraphView::UIState::BOX_DESELECTING) {
@@ -793,24 +819,7 @@ void updateNetworkView(GraphView& gv, char const* name)
           gv.nodeSelection = {gv.activeNode};
         }
       } else if (gv.uiState == GraphView::UIState::PLACING_NEW_NODE) {
-        auto   pos       = toCanvas * mousePos;
-        size_t idx       = graph.addNode(gv.pendingNodeClass, glm::vec2(pos.x, pos.y));
-        gv.activeNode    = idx;
-        gv.nodeSelection = {idx};
-
-        if (gv.pendingLink.source.type == NodePin::OUTPUT &&
-            gv.pendingLink.source.nodeIndex != -1 &&
-            gv.pendingLink.source.pinNumber >= 0 &&
-            graph.noderef(idx).maxInputCount() > 0) {
-          graph.addLink(gv.pendingLink.source.nodeIndex, gv.pendingLink.source.pinNumber, idx, 0);
-        }
-        if (gv.pendingLink.destiny.type == NodePin::INPUT &&
-            gv.pendingLink.destiny.nodeIndex != -1 &&
-            gv.pendingLink.destiny.pinNumber >= 0 &&
-            graph.noderef(idx).outputCount() > 0) {
-          graph.addLink(idx, 0, gv.pendingLink.destiny.nodeIndex, gv.pendingLink.destiny.pinNumber);
-        }
-        gv.pendingLink = {};
+        confirmNewNodePlacing(gv, toCanvas * mousePos);
       } else if (gv.uiState == GraphView::UIState::DRAGGING_LINK_HEAD) {
         if (hoveredPin.type == NodePin::OUTPUT) {
           gv.graph->addLink(hoveredPin.nodeIndex,
@@ -894,7 +903,10 @@ void updateNetworkView(GraphView& gv, char const* name)
     }
 
     // Handle Keydown
-    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Delete))) {
+    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Enter))) {
+      if (gv.uiState == GraphView::UIState::PLACING_NEW_NODE)
+        confirmNewNodePlacing(gv, toCanvas * mousePos);
+    } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Delete))) {
       spdlog::debug("removing nodes [{}] from view {}", fmt::join(gv.nodeSelection, ", "), name);
       graph.removeNodes(gv.nodeSelection);
     } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Tab)) &&
