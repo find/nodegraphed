@@ -45,7 +45,7 @@
 // [X] tab menu filter & completion
 // [ ] link swaping
 // [ ] node swaping
-// [ ] drag link head/tail to empty space creates new node
+// [X] drag link head/tail to empty space creates new node
 // [ ] comment box
 // [ ] group box
 // [ ] anchor node
@@ -85,7 +85,7 @@ static inline float length(const ImVec2& v)
 }
 static inline float cornerRounding(float r)
 {
-  return r > 1 ? r : 0.f;
+  return r > 2 ? r : 0.f;
 }
 static inline glm::vec4 highlight(glm::vec4 const& color,
                                   float            dSat   = 0.1f,
@@ -119,6 +119,10 @@ struct AABB
 
   AABB(Vec2 const& a) { min = max = a; }
   AABB(Vec2 const& a, Vec2 const& b) : AABB(a) { merge(b); }
+  static AABB fromCenterAndSize(Vec2 const& center, Vec2 const& size)
+  {
+    return AABB(center - size * 0.5f, center + size * 0.5f);
+  }
   void merge(Vec2 const& v)
   {
     min.x = std::min(min.x, v.x);
@@ -145,6 +149,14 @@ struct AABB
     AABB ex = *this;
     ex.expand(amount);
     return ex;
+  }
+  Vec2 center() const
+  {
+    return Vec2((min.x + max.x) / 2, (min.y + max.y) / 2);
+  }
+  Vec2 size() const
+  {
+    return Vec2(max.x - min.x, max.y - min.y);
   }
   // test if the that is contained inside this
   bool contains(AABB const& that) const
@@ -226,7 +238,7 @@ static float pointSegmentDistance(Vec2 const& pt,
   return length(diff);
 }
 
-static ptrdiff_t editDistanceLCS(std::string const& a, std::string const& b)
+static ptrdiff_t longestCommonSequenceLength(std::string const& a, std::string const& b)
 {
   std::string const& from = a.length() > b.length() ? b : a;
   std::string const& to = a.length() > b.length() ? a : b;
@@ -320,6 +332,30 @@ void updateInspectorView(GraphView& gv, char const* name)
   ImGui::End();
 }
 
+static glm::mat3 calcToScreenMatrix(GraphView const& gv, AABB<ImVec2> const& scrArea)
+{
+  glm::mat3 scaleMat =
+      glm::scale(glm::identity<glm::mat3>(), glm::vec2(gv.canvasScale, gv.canvasScale));
+  glm::mat3 translateMat = glm::translate(glm::identity<glm::mat3>(), gv.canvasOffset);
+  glm::mat3 windowTranslate =
+      glm::translate(glm::identity<glm::mat3>(),
+                     glm::vec2(scrArea.center().x, scrArea.center().y));
+  return windowTranslate * scaleMat * translateMat;
+}
+
+static int circleSegs(float radius)
+{
+  static const int lut[] = {
+  //0, 1, 2, 3, 4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15
+    4, 4, 6, 6, 7,  8,  9,  9,  9, 10, 10, 12, 12, 13, 13, 14
+  };
+  if (radius<sizeof(lut)/sizeof(lut[0])) {
+    return lut[int(radius)];
+  } else {
+    return std::max(36, int(radius));
+  }
+}
+
 void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelection)
 {
   // Draw Nodes
@@ -336,17 +372,8 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
   auto const   canvasArea         = AABB<ImVec2>(winPos, winPos + canvasSize);
   bool const   cursorInsideCanvas = canvasArea.contains(mousePos);
 
-  auto calcLocalToCanvasMatrix = [&]() {
-    glm::mat3 scaleMat =
-        glm::scale(glm::identity<glm::mat3>(), glm::vec2(canvasScale, canvasScale));
-    glm::mat3 translateMat = glm::translate(glm::identity<glm::mat3>(), gv.canvasOffset);
-    glm::mat3 windowTranslate =
-        glm::translate(glm::identity<glm::mat3>(),
-                       glm::vec2(winPos.x + canvasSize.x / 2, winPos.y + canvasSize.y / 2));
-    return windowTranslate * scaleMat * translateMat;
-  };
-  glm::mat3 const toCanvas = calcLocalToCanvasMatrix();
-  glm::mat3 const toLocal  = glm::inverse(toCanvas);
+  glm::mat3 const toScreen = calcToScreenMatrix(gv, canvasArea);
+  glm::mat3 const toCanvas = glm::inverse(toScreen);
 
   ImDrawList* drawList = ImGui::GetWindowDrawList();
 
@@ -354,7 +381,7 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
   float const GRID_SZ    = 32.0f;
   ImU32 const GRID_COLOR = IM_COL32(80, 80, 80, 40);
   if (gv.drawGrid && GRID_SZ * canvasScale >= 8.f) {
-    auto gridOffset = toCanvas * glm::vec3(0, 0, 1);
+    auto gridOffset = toScreen * glm::vec3(0, 0, 1);
     for (float x = fmodf(gridOffset.x - winPos.x, GRID_SZ * canvasScale); x < canvasSize.x;
          x += GRID_SZ * canvasScale)
       drawList->AddLine(ImVec2(x, 0) + winPos, ImVec2(x, canvasSize.y) + winPos, GRID_COLOR);
@@ -376,7 +403,7 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
     if (gv.uiState == GraphView::UIState::DRAGGING_LINK_BODY &&
         gv.pendingLink.destiny == link.first)
       continue;
-    auto path = transform(gv.graph->linkPath(link.first), toCanvas);
+    auto path = transform(gv.graph->linkPath(link.first), toScreen);
     drawList->AddPolyline(
         path.data(),
         int(path.size()),
@@ -391,10 +418,12 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
   for (size_t i = 0; i < gv.graph->order().size(); ++i) {
     size_t const idx         = gv.graph->order()[i];
     auto const&  node        = gv.graph->nodes().at(idx);
-    auto const   center      = toCanvas * glm::vec3(node.pos(), 1.0);
+    auto const   center      = toScreen * glm::vec3(node.pos(), 1.0);
     auto const   size        = node.size();
+    float const  pinRadius   = 4 * canvasScale;
+    int const    pinSegs     = circleSegs(pinRadius);
     ImVec2 const topleft     = {center.x - size.x / 2.f * canvasScale,
-                            center.y - size.y / 2.f * canvasScale};
+                                center.y - size.y / 2.f * canvasScale};
     ImVec2 const bottomright = {center.x + size.x / 2.f * canvasScale,
                                 center.y + size.y / 2.f * canvasScale};
 
@@ -435,7 +464,7 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
           pincolor = highlight(pincolor, 0.1f, 0.4f, 0.5f);
         }
         drawList->AddCircleFilled(
-            toCanvas * imvec(node.inputPinPos(i)), 4 * canvasScale, imcolor(pincolor));
+            toScreen * imvec(node.inputPinPos(i)), pinRadius, imcolor(pincolor), pinSegs);
       }
       for (int i = 0; i < node.outputCount(); ++i) {
         auto const currentPin = NodePin{NodePin::OUTPUT, idx, i};
@@ -444,7 +473,7 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
           pincolor = highlight(pincolor, 0.1f, 0.4f, 0.5f);
         }
         drawList->AddCircleFilled(
-            toCanvas * imvec(node.outputPinPos(i)), 4 * canvasScale, imcolor(pincolor));
+            toScreen * imvec(node.outputPinPos(i)), pinRadius, imcolor(pincolor), pinSegs);
       }
 
       // Name
@@ -473,31 +502,35 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
   }
 
   // Pending Links ...
-  auto drawLink = [&gv, drawList, &toCanvas, &toLocal](glm::vec2 const& start,
+  auto drawLink = [&gv, drawList, &toScreen, &toCanvas](glm::vec2 const& start,
                                                        glm::vec2 const& end) {
-    auto path = transform(gv.graph->genLinkPath(start, end), toCanvas);
+    auto path = transform(gv.graph->genLinkPath(start, end), toScreen);
     drawList->AddPolyline(path.data(),
                           int(path.size()),
                           IM_COL32(233, 233, 233, 233),
                           false,
                           glm::clamp(1.f * gv.canvasScale, 1.0f, 4.0f));
   };
-  if (gv.uiState == GraphView::UIState::DRAGGING_LINK_HEAD) {
+  if (gv.uiState == GraphView::UIState::DRAGGING_LINK_HEAD ||
+      (gv.uiState == GraphView::UIState::PLACING_NEW_NODE &&
+       gv.pendingLink.destiny.type != NodePin::NONE)) {
     glm::vec2 curveEnd = gv.graph->noderef(gv.pendingLink.destiny.nodeIndex)
                              .inputPinPos(gv.pendingLink.destiny.pinNumber);
-    glm::vec2 curveStart = glmvec(toLocal * mousePos);
+    glm::vec2 curveStart = glmvec(toCanvas * mousePos);
     drawLink(curveStart, curveEnd);
-  } else if (gv.uiState == GraphView::UIState::DRAGGING_LINK_TAIL) {
+  } else if (gv.uiState == GraphView::UIState::DRAGGING_LINK_TAIL ||
+             (gv.uiState == GraphView::UIState::PLACING_NEW_NODE &&
+              gv.pendingLink.source.type != NodePin::NONE)) {
     glm::vec2 curveStart = gv.graph->noderef(gv.pendingLink.source.nodeIndex)
                                .outputPinPos(gv.pendingLink.source.pinNumber);
-    glm::vec2 curveEnd = glmvec(toLocal * mousePos);
+    glm::vec2 curveEnd = glmvec(toCanvas * mousePos);
     drawLink(curveStart, curveEnd);
   } else if (gv.uiState == GraphView::UIState::DRAGGING_LINK_BODY) {
     glm::vec2 curveStart = gv.graph->noderef(gv.pendingLink.source.nodeIndex)
                                .outputPinPos(gv.pendingLink.source.pinNumber);
     glm::vec2 curveEnd = gv.graph->noderef(gv.pendingLink.destiny.nodeIndex)
                              .inputPinPos(gv.pendingLink.destiny.pinNumber);
-    glm::vec2 curveCenter = glmvec(toLocal * mousePos);
+    glm::vec2 curveCenter = glmvec(toCanvas * mousePos);
     if (gv.hoveredPin.type != NodePin::OUTPUT)
       drawLink(curveStart, curveCenter);
     if (gv.hoveredPin.type != NodePin::INPUT)
@@ -509,7 +542,7 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
   if (gv.uiState == GraphView::UIState::CUTING_LINK) {
     std::vector<ImVec2> stroke(gv.linkCuttingStroke.size());
     for (size_t i = 0; i < gv.linkCuttingStroke.size(); ++i)
-      stroke[i] = imvec(toCanvas * glm::vec3(gv.linkCuttingStroke[i], 1.0f));
+      stroke[i] = imvec(toScreen * glm::vec3(gv.linkCuttingStroke[i], 1.0f));
     drawList->AddPolyline(stroke.data(), int(stroke.size()), IM_COL32(255, 0, 0, 233), false, 2);
   }
 }
@@ -534,12 +567,14 @@ void updateContextMenu(GraphView& gv)
     ImGui::PushItemWidth(-1);
     bool confirmed = ImGui::InputText(
       "##nodeClass", nodeClass, sizeof(nodeClass), ImGuiInputTextFlags_EnterReturnsTrue);
-    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape)))
+    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape))) {
+      gv.pendingLink = {};
       ImGui::CloseCurrentPopup();
+    }
     ImGui::Separator();
     if (nodeClass[0] != 0) {
       for (auto const& clsname : classList) {
-        orderedMatches.insert({ editDistanceLCS(nodeClass, clsname), clsname });
+        orderedMatches.insert({ longestCommonSequenceLength(nodeClass, clsname), clsname });
       }
       if (confirmed && !orderedMatches.empty())
         confirmNodeClass((++orderedMatches.rend())->second);
@@ -623,17 +658,8 @@ void updateNetworkView(GraphView& gv, char const* name)
   auto const   clipArea          = canvasArea.expanded(8 * canvasScale);
   bool const   mouseInsideCanvas = canvasArea.contains(mousePos);
 
-  auto calcLocalToCanvasMatrix = [&]() {
-    glm::mat3 scaleMat =
-        glm::scale(glm::identity<glm::mat3>(), glm::vec2(gv.canvasScale, gv.canvasScale));
-    glm::mat3 translateMat = glm::translate(glm::identity<glm::mat3>(), canvasOffset);
-    glm::mat3 windowTranslate =
-        glm::translate(glm::identity<glm::mat3>(),
-                       glm::vec2(winPos.x + canvasSize.x / 2, winPos.y + canvasSize.y / 2));
-    return windowTranslate * scaleMat * translateMat;
-  };
-  glm::mat3 const toCanvas = calcLocalToCanvasMatrix();
-  glm::mat3 const toLocal  = glm::inverse(toCanvas);
+  glm::mat3 const toScreen = calcToScreenMatrix(gv, canvasArea);
+  glm::mat3 const toCanvas = glm::inverse(toScreen);
 
   size_t  hoveredNode = -1;
   size_t  clickedNode = -1;
@@ -648,7 +674,7 @@ void updateNetworkView(GraphView& gv, char const* name)
   for (size_t i = 0; i < graph.order().size(); ++i) {
     size_t const idx     = graph.order()[i];
     auto const&  node    = graph.nodes().at(idx);
-    auto const   center  = toCanvas * glm::vec3(node.pos(), 1.0f);
+    auto const   center  = toScreen * glm::vec3(node.pos(), 1.0f);
     auto const   size    = node.size();
 
     ImVec2 const topleft = {center.x - size.x / 2.f * canvasScale,
@@ -675,13 +701,13 @@ void updateNetworkView(GraphView& gv, char const* name)
     if (nodebox.expanded(8 * canvasScale).contains(mousePos)) {
       for (int ipin = 0; ipin < node.maxInputCount(); ++ipin) {
         if (glm::distance2(node.inputPinPos(ipin),
-                           glm::xy(toLocal * glm::vec3{mousePos.x, mousePos.y, 1})) < 25) {
+                           glm::xy(toCanvas * glm::vec3{mousePos.x, mousePos.y, 1})) < 25) {
           hoveredPin = {NodePin::INPUT, idx, ipin};
         }
       }
       for (int opin = 0; opin < node.outputCount(); ++opin) {
         if (glm::distance2(node.outputPinPos(opin),
-                           glm::xy(toLocal * glm::vec3{mousePos.x, mousePos.y, 1})) < 25) {
+                           glm::xy(toCanvas * glm::vec3{mousePos.x, mousePos.y, 1})) < 25) {
           hoveredPin = {NodePin::OUTPUT, idx, opin};
         }
       }
@@ -704,14 +730,14 @@ void updateNetworkView(GraphView& gv, char const* name)
         if (clickedPin.type == NodePin::OUTPUT) {
           gv.uiState     = GraphView::UIState::DRAGGING_LINK_TAIL;
           gv.pendingLink = {{NodePin::OUTPUT, clickedPin.nodeIndex, clickedPin.pinNumber},
-                            {NodePin::INPUT, size_t(-1), -1}};
+                            {NodePin::NONE, size_t(-1), -1}};
         } else if (clickedPin.type == NodePin::INPUT) {
           gv.uiState     = GraphView::UIState::DRAGGING_LINK_HEAD;
-          gv.pendingLink = {{NodePin::OUTPUT, size_t(-1), -1},
+          gv.pendingLink = {{NodePin::NONE, size_t(-1), -1},
                             {NodePin::INPUT, clickedPin.nodeIndex, clickedPin.pinNumber}};
         }
       } else {
-        glm::vec2 const mouseInLocal = glmvec(toLocal * mousePos);
+        glm::vec2 const mouseInLocal = glmvec(toCanvas * mousePos);
         for (auto& link : graph.links()) {
           auto const linkStart =
               graph.noderef(link.second.nodeIndex).outputPinPos(link.second.pinNumber);
@@ -767,19 +793,37 @@ void updateNetworkView(GraphView& gv, char const* name)
           gv.nodeSelection = {gv.activeNode};
         }
       } else if (gv.uiState == GraphView::UIState::PLACING_NEW_NODE) {
-        auto   pos       = toLocal * mousePos;
+        auto   pos       = toCanvas * mousePos;
         size_t idx       = graph.addNode(gv.pendingNodeClass, glm::vec2(pos.x, pos.y));
         gv.activeNode    = idx;
         gv.nodeSelection = {idx};
+
+        if (gv.pendingLink.source.type == NodePin::OUTPUT &&
+            gv.pendingLink.source.nodeIndex != -1 &&
+            gv.pendingLink.source.pinNumber >= 0 &&
+            graph.noderef(idx).maxInputCount() > 0) {
+          graph.addLink(gv.pendingLink.source.nodeIndex, gv.pendingLink.source.pinNumber, idx, 0);
+        }
+        if (gv.pendingLink.destiny.type == NodePin::INPUT &&
+            gv.pendingLink.destiny.nodeIndex != -1 &&
+            gv.pendingLink.destiny.pinNumber >= 0 &&
+            graph.noderef(idx).outputCount() > 0) {
+          graph.addLink(idx, 0, gv.pendingLink.destiny.nodeIndex, gv.pendingLink.destiny.pinNumber);
+        }
+        gv.pendingLink = {};
       } else if (gv.uiState == GraphView::UIState::DRAGGING_LINK_HEAD) {
         if (hoveredPin.type == NodePin::OUTPUT) {
           gv.graph->addLink(hoveredPin.nodeIndex,
                             hoveredPin.pinNumber,
                             gv.pendingLink.destiny.nodeIndex,
                             gv.pendingLink.destiny.pinNumber);
+          gv.pendingLink = {};
         } else if (hoveredPin.type == NodePin::NONE && hoveredNode != -1) {
           gv.graph->addLink(
               hoveredNode, 0, gv.pendingLink.destiny.nodeIndex, gv.pendingLink.destiny.pinNumber);
+          gv.pendingLink = {};
+        } else if (hoveredNode == -1 && hoveredPin.type == NodePin::NONE) {
+          ImGui::OpenPopup("Create Node");
         }
       } else if (gv.uiState == GraphView::UIState::DRAGGING_LINK_TAIL) {
         if (hoveredPin.type == NodePin::INPUT) {
@@ -787,9 +831,13 @@ void updateNetworkView(GraphView& gv, char const* name)
                             gv.pendingLink.source.pinNumber,
                             hoveredPin.nodeIndex,
                             hoveredPin.pinNumber);
+          gv.pendingLink = {};
         } else if (hoveredPin.type == NodePin::NONE && hoveredNode != -1) {
           gv.graph->addLink(
               gv.pendingLink.source.nodeIndex, gv.pendingLink.source.pinNumber, hoveredNode, 0);
+          gv.pendingLink = {};
+        } else if (hoveredNode == -1 && hoveredPin.type == NodePin::NONE) {
+          ImGui::OpenPopup("Create Node");
         }
       } else if (gv.uiState == GraphView::UIState::DRAGGING_LINK_BODY) {
         if (hoveredPin.type == NodePin::INPUT &&
@@ -820,6 +868,7 @@ void updateNetworkView(GraphView& gv, char const* name)
                               gv.pendingLink.destiny.pinNumber);
           }
         }
+        gv.pendingLink = {};
       }
       gv.uiState = GraphView::UIState::VIEWING;
     }
@@ -829,16 +878,16 @@ void updateNetworkView(GraphView& gv, char const* name)
 
     // Paning
     if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f)) {
-      auto const srcDelta = glm::xy(toLocal * glm::vec3(mouseDelta.x, mouseDelta.y, 0.0));
+      auto const srcDelta = glm::xy(toCanvas * glm::vec3(mouseDelta.x, mouseDelta.y, 0.0));
       gv.canvasOffset += srcDelta;
     }
     // Scaling
     if (abs(ImGui::GetIO().MouseWheel) > 0.1) {
       gv.canvasScale = glm::clamp(gv.canvasScale + ImGui::GetIO().MouseWheel / 20.f, 0.1f, 10.f);
       // cursor as scale center:
-      glm::mat3  newXform     = calcLocalToCanvasMatrix();
+      glm::mat3  newXform     = calcToScreenMatrix(gv, canvasArea);
       auto const cc           = mousePos;
-      auto const ccInOldLocal = toLocal * cc;
+      auto const ccInOldLocal = toCanvas * cc;
       auto const ccInNewLocal = glm::inverse(newXform) * cc;
       gv.canvasOffset +=
           glm::vec2(ccInNewLocal.x - ccInOldLocal.x, ccInNewLocal.y - ccInOldLocal.y);
@@ -866,13 +915,13 @@ void updateNetworkView(GraphView& gv, char const* name)
       gv.uiState = GraphView::UIState::BOX_SELECTING;
       gv.nodeSelection.clear();
     } else if (gv.uiState == GraphView::UIState::DRAGGING_NODES) { // drag nodes
-      auto const srcDelta = glm::xy(toLocal * glm::vec3(mouseDelta.x, mouseDelta.y, 0.0));
+      auto const srcDelta = glm::xy(toCanvas * glm::vec3(mouseDelta.x, mouseDelta.y, 0.0));
       if (glm::length(srcDelta) > 0) {
         graph.moveNodes(gv.nodeSelection, srcDelta);
       }
     } else if (ImGui::IsKeyDown(ImGui::GetKeyIndex(ImGuiKey_Y))) { // cut links
       gv.uiState = GraphView::UIState::CUTING_LINK;
-      auto mp    = toLocal * mousePos;
+      auto mp    = toCanvas * mousePos;
       gv.linkCuttingStroke.push_back(glm::vec2(mp.x, mp.y));
     }
   }

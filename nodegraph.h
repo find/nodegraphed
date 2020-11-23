@@ -16,9 +16,9 @@ struct NodePin
 {
   enum
   {
+    NONE,
     INPUT,
     OUTPUT,
-    NONE
   } type;
   size_t nodeIndex;
   int    pinNumber;
@@ -311,7 +311,7 @@ struct GraphView
   UIState     uiState           = UIState::VIEWING;
   glm::vec2   selectionBoxStart = {0, 0};
   glm::vec2   selectionBoxEnd   = {0, 0};
-  Link        pendingLink       = {{NodePin::OUTPUT, size_t(-1), -1}, {NodePin::INPUT, size_t(-1), -1}};
+  Link        pendingLink       = {{NodePin::NONE, size_t(-1), -1}, {NodePin::NONE, size_t(-1), -1}};
   std::string pendingNodeClass  = "node";
 
   glm::vec2 pendingLinkPos;
