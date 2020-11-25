@@ -25,8 +25,8 @@ class MyTestHook : public editorui::NodeGraphHook
     std::string name;
   };
 
-  std::vector<std::string> const& nodeClassList() override {
-    static std::vector<std::string> clsList = {
+  std::vector<std::string> nodeClassList() override {
+    std::vector<std::string> clsList = {
       "hello",
       "world",
       "foo",
@@ -42,15 +42,13 @@ class MyTestHook : public editorui::NodeGraphHook
     return clsList;
   }
 
-  bool prepareNodeCreation(editorui::Graph* parent, std::string const& type, std::string& name) override
+  void* createNode( editorui::Graph* parent,
+                    std::string const& type,
+                    std::string const& name,
+                    std::string& outName ) override
   {
-    name = type + '_' + std::to_string(++typeNumericSuffix[type]);
-    return true;
-  }
-
-  void* createNode(editorui::Graph* parent, std::string const& type, std::string const& name) override
-  {
-    return new RealNode{ type, name };
+    outName = name + '_' + std::to_string(++typeNumericSuffix[type]);
+    return new RealNode{ type, outName };
   }
 
   void beforeDeleteNode(editorui::Node* node) override

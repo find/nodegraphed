@@ -84,12 +84,12 @@ public:
   /// creates a new custom graph
   virtual void* createGraph(Graph const* host) { return nullptr; }
 
-  /// check if the node of given type and name can be created
-  /// name may be changed to suggested
-  virtual bool prepareNodeCreation(Graph* host, std::string const& type, std::string& name) { return true; }
-
   /// creates a new custom node of given type and name
-  virtual void* createNode(Graph* host, std::string const& type, std::string const& name) { return nullptr; }
+  virtual void* createNode(Graph* host, std::string const& type, std::string const& name, std::string& outName)
+  {
+    outName = name;
+    return nullptr;
+  }
 
   /// called when trying to change a node's name
   /// @param node: the UI node hosting logical node
@@ -133,7 +133,7 @@ public:
   }
   virtual void onLinkAttached(Node* source, int srcOutputPin, Node* dest, int destInputPin) {}
   virtual void onLinkDetached(Node* source, int srcOutputPin, Node* dest, int destInputPin) {}
-  virtual std::vector<std::string> const& nodeClassList() { static std::vector<std::string> emptyList = {}; return emptyList; }
+  virtual std::vector<std::string> nodeClassList() { return {}; }
 };
 
 class NodeIdAllocator
@@ -368,17 +368,22 @@ public:
 
   void setPayload(void* payload) { payload_ = payload; }
 
-  size_t addNode(std::string const& type, glm::vec2 const& pos)
+  size_t addNode(std::string const& type, glm::vec2 const& pos, void* payload=nullptr)
   {
     size_t id = -1;
     std::string name = type;
-    if (hook_ ? hook_->prepareNodeCreation(this, type, name) : true) {
+    void* nodepayload = payload
+      ? payload
+      : hook_
+        ? hook_->createNode(this, type, name, name)
+        : nullptr;
+    if (hook_ ? !!nodepayload : true) {
       id = NodeIdAllocator::instance().newId();
       Node node;
       node.name_ = name;
       node.pos_  = pos;
       node.hook_ = hook_;
-      node.setPayload(hook_ ? hook_->createNode(this, type, name) : nullptr);
+      node.setPayload(nodepayload);
       nodes_.insert({id, node});
       nodeOrder_.push_back(id);
     }
@@ -485,10 +490,12 @@ public:
     }
   }
 
-  void addLink(size_t srcnode, int srcpin, size_t dstnode, int dstpin)
+  void addLink(size_t srcnode, int srcpin, size_t dstnode, int dstpin, bool bypassHook=false)
   {
     if (nodes_.find(srcnode) != nodes_.end() && nodes_.find(dstnode) != nodes_.end()) {
-      if (hook_ ? hook_->canLinkTo(&noderef(srcnode), srcpin, &noderef(dstnode), dstpin) : true) {
+      if ((hook_ && !bypassHook)
+          ? hook_->canLinkTo(&noderef(srcnode), srcpin, &noderef(dstnode), dstpin)
+          : true) {
         removeLink(dstnode, dstpin);
         auto dst    = NodePin{NodePin::INPUT, dstnode, dstpin};
         links_[dst] = NodePin{NodePin::OUTPUT, srcnode, srcpin};
@@ -501,12 +508,12 @@ public:
     notifyViewers();
   }
 
-  void removeLink(size_t dstnode, int dstpin)
+  void removeLink(size_t dstnode, int dstpin, bool bypassHook=false)
   {
     auto const np                = NodePin{NodePin::INPUT, dstnode, dstpin};
     auto       originalSourceItr = links_.find(NodePin{NodePin::INPUT, dstnode, dstpin});
     if (originalSourceItr != links_.end()) {
-      if (hook_)
+      if (hook_ && !bypassHook)
         hook_->onLinkDetached(&noderef(originalSourceItr->second.nodeIndex),
                               originalSourceItr->second.pinNumber,
                               &noderef(dstnode),
@@ -522,13 +529,13 @@ public:
     return src == links_.end() ? -1 : src->second.nodeIndex;
   }
 
-  void removeNode(size_t idx)
+  void removeNode(size_t idx, bool bypassHook=false)
   {
-    if (hook_ && !hook_->nodeCanBeDeleted(&noderef(idx)))
+    if (hook_ && !bypassHook && !hook_->nodeCanBeDeleted(&noderef(idx)))
       return;
     for (auto itr = links_.begin(); itr != links_.end();) {
       if (itr->second.nodeIndex == idx || itr->first.nodeIndex == idx) {
-        if (hook_) {
+        if (hook_ && !bypassHook) {
           hook_->onLinkDetached(&noderef(itr->second.nodeIndex),
                                 itr->second.pinNumber,
                                 &noderef(itr->first.nodeIndex),
@@ -539,7 +546,7 @@ public:
         ++itr;
       }
     }
-    if (hook_) {
+    if (hook_ && !bypassHook) {
       hook_->beforeDeleteNode(&noderef(idx));
     }
     nodes_.erase(idx);
@@ -550,14 +557,14 @@ public:
   }
 
   template<class Container>
-  void removeNodes(Container const& indices)
+  void removeNodes(Container const& indices, bool bypassHook=false)
   {
     for (auto idx : indices) {
-      if (hook_ && !hook_->nodeCanBeDeleted(&noderef(idx)))
+      if (hook_ && !bypassHook && !hook_->nodeCanBeDeleted(&noderef(idx)))
         continue;
       for (auto itr = links_.begin(); itr != links_.end();) {
         if (itr->second.nodeIndex == idx || itr->first.nodeIndex == idx) {
-          if (hook_)
+          if (hook_ && !bypassHook)
             hook_->onLinkDetached(&noderef(itr->second.nodeIndex),
                                   itr->second.pinNumber,
                                   &noderef(itr->first.nodeIndex),
@@ -567,7 +574,7 @@ public:
           ++itr;
         }
       }
-      if (hook_) {
+      if (hook_ && bypassHook) {
         hook_->beforeDeleteNode(&noderef(idx));
       }
       nodes_.erase(idx);
@@ -604,13 +611,12 @@ public:
       hook_->onNodeDoubleClicked(&noderef(nodeid));
   }
 
-  std::vector<std::string> const& getNodeClassList() const
+  std::vector<std::string> getNodeClassList() const
   {
-    static std::vector<std::string> emptyList = {};
     if (hook_)
       return hook_->nodeClassList();
     else
-      return emptyList;
+      return {};
   }
 };
 
