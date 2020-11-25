@@ -80,11 +80,19 @@ project('imgui')
   elseif _OPTIONS['opengl2'] then
     files({'deps/imgui/backends/imgui_impl_glfw.*', 'deps/imgui/backends/imgui_impl_opengl2.*'})
     files{'entry/gl2_main.cpp'}
-    linklater({'glfw3','opengl32'})
+    if os.target()=='windows' then
+      linklater({'glfw3','opengl32'})
+    else
+      linklater({'glfw','GL','dl','pthread'})
+    end
   elseif _OPTIONS['opengl3'] then
     files({'deps/imgui/backends/imgui_impl_glfw.*', 'deps/imgui/backends/imgui_impl_opengl3.*'})
     files{'entry/gl3_main.cpp'}
-    linklater({'glfw3','opengl32'})
+    if os.target()=='windows' then
+      linklater({'glfw3','opengl32'})
+    else
+      linklater({'glfw','GL','dl','pthread'})
+    end
   else
     files({'deps/imgui/backends/imgui_impl_win32.*', 'deps/imgui/backends/imgui_impl_dx11.*'})
     files{'entry/dx11_main.cpp'}
