@@ -292,17 +292,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(glm::vec4, x, y, z, w);
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(glm::vec3, x, y, z);
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(glm::vec2, x, y);
 
-bool Graph::save(std::string const& path)
+bool Graph::save(nlohmann::json& section, std::string const& path)
 {
-  std::ofstream outfile(path, std::ios::binary);
-  if (!outfile) {
-    spdlog::warn("failed to open \"{}\" for writing", path);
-    return false;
-  }
-
-  nlohmann::json json;
-  auto& section = json["uigraph"];
-  auto& nodesection = section["nodes"];
+  auto& uigraph = section["uigraph"];
+  auto& nodesection = uigraph["nodes"];
   for (auto const& n : nodes_) {
     nlohmann::json nodedef;
     nodedef["id"] = n.first;
@@ -315,7 +308,7 @@ bool Graph::save(std::string const& path)
 
     nodesection.push_back(nodedef);
   }
-  auto& linksection = section["links"];
+  auto& linksection = uigraph["links"];
   for (auto const& link: links_) {
     nlohmann::json linkdef;
     linkdef["from"] = { {"node", link.second.nodeIndex}, {"pin", link.second.pinNumber} };
@@ -323,32 +316,17 @@ bool Graph::save(std::string const& path)
 
     linksection.push_back(linkdef);
   }
-  section["order"] = nodeOrder_;
+  uigraph["order"] = nodeOrder_;
 
   if (hook_) {
-    hook_->onSave(this, json, path);
+    hook_->onSave(this, section, path);
   }
 
-  auto const& str = json.dump(2);
-  return !!outfile.write(str.c_str(), str.size());
+  return true;
 }
 
-bool Graph::load(std::string const& path)
+bool Graph::load(nlohmann::json const& section, std::string const& path)
 {
-  std::ifstream infile(path, std::ios::binary);
-  if (!infile) {
-    spdlog::warn("failed to open \"{}\" for reading", path);
-    return false;
-  }
-
-  nlohmann::json json;
-  try {
-    json = nlohmann::json::parse(infile);
-  } catch(std::exception const& e) {
-    spdlog::error("parse error: {}", e.what());
-    return false;
-  }
-
   if (hook_) {
     for (auto& n : nodes_) {
       hook_->beforeDeleteNode(&n.second);
@@ -359,9 +337,9 @@ bool Graph::load(std::string const& path)
   linkPathes_.clear();
   nodeOrder_.clear();
 
-  auto const& section = json["uigraph"];
+  auto const& uigraph = section["uigraph"];
   size_t maxNodeId = 0;
-  for (auto const& n: section["nodes"]) {
+  for (auto const& n: uigraph["nodes"]) {
     Node node;
     node.name_ = n["name"];
     node.numInputs_ = n["maxInputs"];
@@ -376,11 +354,11 @@ bool Graph::load(std::string const& path)
     maxNodeId = std::max(id, maxNodeId);
   }
   NodeIdAllocator::instance().setInitialId(maxNodeId+1);
-  for (auto const& link: section["links"]) {
+  for (auto const& link: uigraph["links"]) {
     links_[NodePin{ NodePin::INPUT,link["to"]["node"], link["to"]["pin"] }] = NodePin{ NodePin::OUTPUT, link["from"]["node"], link["from"]["pin"] };
   }
-  if (section.find("order")!=section.end()) {
-    for (size_t id : section["order"]) {
+  if (uigraph.find("order")!=uigraph.end()) {
+    for (size_t id : uigraph["order"]) {
       nodeOrder_.push_back(id);
     }
   } else {
@@ -392,9 +370,8 @@ bool Graph::load(std::string const& path)
     updateLinkPath(n.first);
 
   if(hook_) {
-    return hook_->onLoad(this, json, path);
+    return hook_->onLoad(this, section, path);
   }
-
   return true;
 }
 
@@ -757,8 +734,14 @@ void updateNetworkView(GraphView& gv, char const* name)
         nfdchar_t* path = nullptr;
         auto result = NFD_OpenDialog("json;graph", nullptr, &path);
         if (result==NFD_OKAY && path) {
-          spdlog::info("loading graph from \"{}\"", path);
-          spdlog::info("loading {}", gv.graph->load(path) ? "succeed" : "failed");
+          try {
+            std::ifstream ifile(path, std::ios::binary);
+            auto json = nlohmann::json::parse(ifile);
+            spdlog::info("loading graph from \"{}\"", path);
+            spdlog::info("loading {}", gv.graph->load(json, path) ? "succeed" : "failed");
+          } catch(std::exception const& e) {
+            spdlog::error("failed to load file \"{}\": {}", path, e.what());
+          }
           free(path);
         }
       }
@@ -766,9 +749,17 @@ void updateNetworkView(GraphView& gv, char const* name)
         nfdchar_t* path = nullptr;
         auto result = NFD_SaveDialog("json;graph", nullptr, &path);
         if (result==NFD_OKAY && path) {
-          spdlog::info("saving graph to \"{}\"", path);
-          spdlog::info("saving {}", gv.graph->save(path)? "succeed" : "failed");
-          free(path);
+          std::ofstream ofile(path, std::ios::binary);
+          if (!ofile) {
+            spdlog::error("cannot open \"{}\" for writing", path);
+          } else {
+            nlohmann::json json;
+            spdlog::info("saving graph to \"{}\"", path);
+            spdlog::info("saving {}", gv.graph->save(json, path) ? "succeed" : "failed");
+            auto const& str = json.dump(2);
+            ofile.write(str.c_str(), str.length());
+            free(path);
+          }
         }
       }
       if (ImGui::MenuItem("Quit", nullptr, nullptr)) {

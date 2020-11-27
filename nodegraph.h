@@ -627,8 +627,8 @@ public:
       return {};
   }
 
-  bool save(std::string const& path);
-  bool load(std::string const& path);
+  bool save(nlohmann::json& section, std::string const& path);
+  bool load(nlohmann::json const& section, std::string const& path);
 };
 
 void updateAndDraw(GraphView& graph, char const* name);
