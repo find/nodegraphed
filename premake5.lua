@@ -23,6 +23,42 @@ newoption({
   description='using opengl3 implement'
 })
 
+local projectndf = function(root_dir)
+  project "nfd"
+    kind "StaticLib"
+
+    -- common files
+    files {root_dir.."src/*.h",
+           root_dir.."src/include/*.h",
+           root_dir.."src/nfd_common.c",
+    }
+
+    includedirs {root_dir.."src/include/"}
+
+    warnings "extra"
+
+    -- system build filters
+    filter "system:windows"
+      language "C++"
+      files {root_dir.."src/nfd_win.cpp"}
+
+    filter {"action:gmake or action:xcode4"}
+      buildoptions {"-fno-exceptions"}
+
+    filter "system:macosx"
+      language "C"
+      files {root_dir.."src/nfd_cocoa.m"}
+
+    filter {"system:linux"}
+      language "C"
+      files {root_dir.."src/nfd_gtk.c"}
+      buildoptions {"`pkg-config --cflags gtk+-3.0`"}
+
+    -- visual studio filters
+    filter "action:vs*"
+      defines { "_CRT_SECURE_NO_WARNINGS" }      
+end
+
 local _laterlinks = {}
 local linklater = function(libs)
   libs = libs or {}
@@ -43,12 +79,6 @@ workspace('imgui-nodegraph')
   configurations({'Release','Debug'})
   platforms({'native','x64','x86','arm'})
   location('.build/'.._ACTION)
-  includedirs({
-    'deps/imgui',
-    'deps/spdlog/include',
-    'deps/glm',
-    'deps/json',
-  })
   startproject('nodegrapher')
   defines({
     'SPDLOG_COMPILED_LIB'
@@ -68,11 +98,11 @@ project('imgui')
   if _OPTIONS['dx11'] then
     files({'deps/imgui/backends/imgui_impl_win32.*', 'deps/imgui/backends/imgui_impl_dx11.*'})
     files{'entry/dx11_main.cpp'}
-    linklater({'d3d11.lib', 'dxgi.lib', 'd3dcompiler.lib'})
+    linklater({'d3d11.lib', 'dxgi.lib', 'd3dcompiler.lib','ole32','uuid'})
   elseif _OPTIONS['dx12'] then
     files({'deps/imgui/backends/imgui_impl_win32.*', 'deps/imgui/backends/imgui_impl_dx12.*'})
     files{'entry/dx12_main.cpp'}
-    linklater({'d3d12.lib', 'dxgi.lib', 'd3dcompiler.lib'})
+    linklater({'d3d12.lib', 'dxgi.lib', 'd3dcompiler.lib','ole32','uuid'})
   elseif _OPTIONS['vulkan'] then
     files({'deps/imgui/backends/imgui_impl_glfw.*', 'deps/imgui/backends/imgui_impl_vulkan.*'})
     files{'entry/vulkan_main.cpp'}
@@ -81,7 +111,7 @@ project('imgui')
     files({'deps/imgui/backends/imgui_impl_glfw.*', 'deps/imgui/backends/imgui_impl_opengl2.*'})
     files{'entry/gl2_main.cpp'}
     if os.target()=='windows' then
-      linklater({'glfw3','opengl32'})
+      linklater({'glfw3','opengl32','ole32','uuid'})
     else
       linklater({'glfw','GL','dl','pthread'})
     end
@@ -89,7 +119,7 @@ project('imgui')
     files({'deps/imgui/backends/imgui_impl_glfw.*', 'deps/imgui/backends/imgui_impl_opengl3.*'})
     files{'entry/gl3_main.cpp'}
     if os.target()=='windows' then
-      linklater({'glfw3','opengl32'})
+      linklater({'glfw3','opengl32','ole32','uuid'})
     else
       linklater({'glfw','GL','dl','pthread'})
     end
@@ -101,15 +131,27 @@ project('imgui')
 
 project('spdlog')
   kind('StaticLib')
+  includedirs({
+    'deps/spdlog/include',
+  })
   files({
     'deps/spdlog/include/spdlog/**',
     'deps/spdlog/src/*.cpp'
   })
 
+projectndf('deps/nativefiledialog/')
+
 project('nodegrapher')
   kind('ConsoleApp')
+  includedirs({
+    'deps/imgui',
+    'deps/spdlog/include',
+    'deps/glm',
+    'deps/json',
+    'deps/nativefiledialog/src/include',
+  })
   files({'*.h', '*.cpp'})
-  links({'imgui', 'spdlog'})
+  links({'imgui', 'spdlog', 'nfd'})
   links(laterlinks())
   filter('system:windows')
     links({ "ole32", "ws2_32", "advapi32", "version"})
