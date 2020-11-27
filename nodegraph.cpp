@@ -5,6 +5,8 @@
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
+#include <nfd.h>
+
 #include <glm/ext.hpp>
 #include <glm/gtx/color_space.hpp>
 #include <glm/gtx/io.hpp>
@@ -13,6 +15,9 @@
 #include <glm/gtx/string_cast.hpp>
 #include <glm/gtx/vec_swizzle.hpp>
 
+#include <nlohmann/json.hpp>
+
+#include <fstream>
 #include <cstdlib>
 #include <memory>
 
@@ -282,6 +287,119 @@ void GraphView::onGraphChanged()
       activeNode = -1;
   }
 }
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(glm::vec4, x, y, z, w);
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(glm::vec3, x, y, z);
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(glm::vec2, x, y);
+
+bool Graph::save(std::string const& path)
+{
+  std::ofstream outfile(path, std::ios::binary);
+  if (!outfile) {
+    spdlog::warn("failed to open \"{}\" for writing", path);
+    return false;
+  }
+
+  nlohmann::json json;
+  auto& section = json["uigraph"];
+  auto& nodesection = section["nodes"];
+  for (auto const& n : nodes_) {
+    nlohmann::json nodedef;
+    nodedef["id"] = n.first;
+    nodedef["name"] = n.second.name();
+    nodedef["minInputs"] = n.second.minInputCount();
+    nodedef["maxInputs"] = n.second.maxInputCount();
+    nodedef["nOutputs"] = n.second.outputCount();
+    to_json(nodedef["color"], n.second.color());
+    to_json(nodedef["pos"],   n.second.pos());
+
+    nodesection.push_back(nodedef);
+  }
+  auto& linksection = section["links"];
+  for (auto const& link: links_) {
+    nlohmann::json linkdef;
+    linkdef["from"] = { {"node", link.second.nodeIndex}, {"pin", link.second.pinNumber} };
+    linkdef["to"] = { {"node", link.first.nodeIndex}, {"pin", link.first.pinNumber} };
+
+    linksection.push_back(linkdef);
+  }
+  section["order"] = nodeOrder_;
+
+  if (hook_) {
+    hook_->onSave(this, json, path);
+  }
+
+  auto const& str = json.dump(2);
+  return !!outfile.write(str.c_str(), str.size());
+}
+
+bool Graph::load(std::string const& path)
+{
+  std::ifstream infile(path, std::ios::binary);
+  if (!infile) {
+    spdlog::warn("failed to open \"{}\" for reading", path);
+    return false;
+  }
+
+  nlohmann::json json;
+  try {
+    json = nlohmann::json::parse(infile);
+  } catch(std::exception const& e) {
+    spdlog::error("parse error: {}", e.what());
+    return false;
+  }
+
+  if (hook_) {
+    for (auto& n : nodes_) {
+      hook_->beforeDeleteNode(&n.second);
+    }
+  }
+  nodes_.clear();
+  links_.clear();
+  linkPathes_.clear();
+  nodeOrder_.clear();
+
+  auto const& section = json["uigraph"];
+  size_t maxNodeId = 0;
+  for (auto const& n: section["nodes"]) {
+    Node node;
+    node.name_ = n["name"];
+    node.numInputs_ = n["maxInputs"];
+    node.numOutputs_ = n["nOutputs"];
+    node.hook_ = nullptr; // Hooks are processed later
+    from_json(n["color"], node.color_);
+    from_json(n["pos"], node.pos_);
+
+    size_t id = n["id"];
+    nodes_[id] = node;
+
+    maxNodeId = std::max(id, maxNodeId);
+  }
+  NodeIdAllocator::instance().setInitialId(maxNodeId+1);
+  for (auto const& link: section["links"]) {
+    links_[NodePin{ NodePin::INPUT,link["to"]["node"], link["to"]["pin"] }] = NodePin{ NodePin::OUTPUT, link["from"]["node"], link["from"]["pin"] };
+  }
+  if (section.find("order")!=section.end()) {
+    for (size_t id : section["order"]) {
+      nodeOrder_.push_back(id);
+    }
+  } else {
+    for (auto const& n : nodes_)
+      nodeOrder_.push_back(n.first);
+  }
+
+  for(auto const& n: nodes_)
+    updateLinkPath(n.first);
+
+  if(hook_) {
+    return hook_->onLoad(this, json, path);
+  }
+
+  return true;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////
+
 
 void updateInspectorView(GraphView& gv, char const* name)
 {
@@ -635,8 +753,24 @@ void updateNetworkView(GraphView& gv, char const* name)
   }
   if (ImGui::BeginMenuBar()) {
     if (ImGui::BeginMenu("File")) {
-      ImGui::MenuItem("Open ...", nullptr, nullptr);
-      ImGui::MenuItem("Save ...", nullptr, nullptr);
+      if (ImGui::MenuItem("Open ...", nullptr, nullptr)) {
+        nfdchar_t* path = nullptr;
+        auto result = NFD_OpenDialog("json;graph", nullptr, &path);
+        if (result==NFD_OKAY && path) {
+          spdlog::info("loading graph from \"{}\"", path);
+          spdlog::info("loading {}", gv.graph->load(path) ? "succeed" : "failed");
+          free(path);
+        }
+      }
+      if (ImGui::MenuItem("Save ...", nullptr, nullptr)) {
+        nfdchar_t* path = nullptr;
+        auto result = NFD_SaveDialog("json;graph", nullptr, &path);
+        if (result==NFD_OKAY && path) {
+          spdlog::info("saving graph to \"{}\"", path);
+          spdlog::info("saving {}", gv.graph->save(path)? "succeed" : "failed");
+          free(path);
+        }
+      }
       if (ImGui::MenuItem("Quit", nullptr, nullptr)) {
         // TODO
       }

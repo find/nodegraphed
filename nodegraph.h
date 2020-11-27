@@ -362,6 +362,7 @@ protected:
 
 public:
   auto const& nodes() const { return nodes_; }
+  auto&       nodes() { return nodes_; }
   auto const& links() const { return links_; }
   auto const& linkPathes() const { return linkPathes_; }
   auto const& order() const { return nodeOrder_; }
@@ -625,6 +626,9 @@ public:
     else
       return {};
   }
+
+  bool save(std::string const& path);
+  bool load(std::string const& path);
 };
 
 void updateAndDraw(GraphView& graph, char const* name);

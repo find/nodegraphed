@@ -10,6 +10,9 @@
 #else
 #include <spdlog/sinks/ansicolor_sink.h>
 #endif
+
+#include <nlohmann/json.hpp>
+
 #include <imgui.h>
 #include <math.h> // fmodf
 
@@ -61,6 +64,38 @@ class MyTestHook : public editorui::NodeGraphHook
       return 2;
     else
       return 1;
+  }
+
+  bool onSave(editorui::Graph const* graph, nlohmann::json& json, std::string const& path) override {
+    auto& section = json["runtimegraph"];
+    auto& mapping = section["mapping"];
+    for (auto node : graph->nodes()) {
+      if (node.second.payload()) {
+        mapping[std::to_string(node.first)] = {
+          {"type", static_cast<RealNode const*>(node.second.payload())->type},
+          {"name", static_cast<RealNode const*>(node.second.payload())->name} };
+      } else {
+        spdlog::warn("node {}({}) has no payload??", node.first, node.second.name());
+      }
+    }
+    return true;
+  }
+
+  bool onLoad(editorui::Graph* graph, nlohmann::json const& json, std::string const& path) override {
+    auto const& section = json["runtimegraph"];
+    auto const& mapping = section["mapping"];
+    for (auto& node : graph->nodes()) {
+      std::string id = std::to_string(node.first);
+      if (mapping.find(id) != mapping.end()) {
+        std::string type = mapping[id]["type"];
+        std::string name = mapping[id]["name"];
+        node.second.setPayload(new RealNode{ type, name });
+        node.second.setHook(this);
+      } else {
+        spdlog::warn("node {}({}) has no mapping?", id, node.second.name());
+      }
+    }
+    return true;
   }
 };
 std::map<std::string, int> MyTestHook::typeNumericSuffix;
