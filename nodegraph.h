@@ -70,32 +70,39 @@ public:
   /// @param host: the graph hosts this hook lives within
   /// @param jsobj: the json section to write to
   /// @return: succesfully saved or not
-  virtual bool save(Graph const* host, nlohmann::json& jsobj) { return false; }
+  virtual bool onSave(Graph const* host, nlohmann::json& jsobj, std::string const& path) { return false; }
 
   /// called after the UI graph was loaed
   /// @param host: the graph hosts this hook lives within
   /// @param jsobj: the json section to load
   /// @return: succesfully loaded or not
-  virtual bool load(Graph* host, nlohmann::json const& jsobj) { return false; }
-
-  /// check if the graph can be created given this host
-  virtual bool graphCanBeCreated(Graph const* host) { return true; }
+  virtual bool onLoad(Graph* host, nlohmann::json const& jsobj, std::string const& path) { return false; }
 
   /// creates a new custom graph
   virtual void* createGraph(Graph const* host) { return nullptr; }
 
   /// creates a new custom node of given type and name
-  virtual void* createNode(Graph* host, std::string const& type, std::string const& name, std::string& outName)
+  virtual void* createNode(Graph* host,                 // the graph this node belongs to
+                           std::string const& type,     // node's type name
+                           std::string const& desiredName, // desired name
+                           std::string& acceptedName)   // if the desired name is not legal inside this network,
+                                                        // yet can be modified to fit, this outputs the modified
+                                                        // and accpted new name
   {
-    outName = name;
+    acceptedName = desiredName;
     return nullptr;
   }
 
   /// called when trying to change a node's name
   /// @param node: the UI node hosting logical node
-  /// @param newname: the new node name, can be changed, your change will be the real display name
+  /// @param desiredName: the name we want
+  /// @param acceptedName: modified name if desiredName is illegal, but can be modified to be legal
   /// @return: true if this rename is acceptable, else false
-  virtual bool onNodeNameChanged(Node const* node, std::string& newname) { return true; }
+  virtual bool onNodeNameChanged(Node const* node, std::string const& desiredName, std::string& acceptedName)
+  {
+    acceptedName = desiredName;
+    return true;
+  }
 
   /// just let you know that the UI node color has been changed
   virtual void onNodeColorChanged(Node const* node, glm::vec4 const& newcolor) {}
@@ -127,7 +134,7 @@ public:
   virtual bool nodeCanBeDeleted(Node* node) { return true; }
   virtual void beforeDeleteNode(Node* node) {}
   virtual void beforeDeleteGraph(Graph* host) {}
-  virtual bool canLinkTo(Node* source, int srcOutputPin, Node* dest, int destInputPin)
+  virtual bool linkCanBeAttached(Node* source, int srcOutputPin, Node* dest, int destInputPin)
   {
     return true;
   }
@@ -182,7 +189,7 @@ public:
 
   void setName(std::string name)
   {
-    if (hook_ ? hook_->onNodeNameChanged(this, name) : true)
+    if (hook_ ? hook_->onNodeNameChanged(this, name, name) : true)
       name_ = std::move(name);
   }
 
@@ -494,7 +501,7 @@ public:
   {
     if (nodes_.find(srcnode) != nodes_.end() && nodes_.find(dstnode) != nodes_.end()) {
       if ((hook_ && !bypassHook)
-          ? hook_->canLinkTo(&noderef(srcnode), srcpin, &noderef(dstnode), dstpin)
+          ? hook_->linkCanBeAttached(&noderef(srcnode), srcpin, &noderef(dstnode), dstpin)
           : true) {
         removeLink(dstnode, dstpin);
         auto dst    = NodePin{NodePin::INPUT, dstnode, dstpin};
