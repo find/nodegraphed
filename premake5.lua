@@ -51,8 +51,7 @@ local projectndf = function(root_dir)
 
     filter {"system:linux"}
       language "C"
-      files {root_dir.."src/nfd_gtk.c"}
-      buildoptions {"`pkg-config --cflags gtk+-3.0`"}
+      files {root_dir.."src/nfd_zenity.c"}
 
     -- visual studio filters
     filter "action:vs*"
