@@ -424,8 +424,13 @@ public:
   void removeViewer(GraphView const* view)
   {
     auto itr = std::find(viewers_.begin(), viewers_.end(), view);
-    if (itr!=viewers_.end())
+    if (itr != viewers_.end()) {
       viewers_.erase(itr);
+      delete view;
+    } else {
+      // spdlog::error("graphview {} does not belong to graph {}", view, this);
+      assert(!"graphview does not belong to this graph");
+    }
   }
 
   void notifyViewers()

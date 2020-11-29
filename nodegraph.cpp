@@ -371,9 +371,8 @@ void updateInspectorView(GraphView& gv, char const* name)
 {
   if (!gv.showInspector)
     return;
-  auto title = fmt::format("Inspector##inspector{}", name);
   ImGui::SetNextWindowSize(ImVec2{320, 480}, ImGuiCond_FirstUseEver);
-  if (!ImGui::Begin(title.c_str(), &gv.showInspector, ImGuiWindowFlags_MenuBar)) {
+  if (!ImGui::Begin(name, &gv.showInspector, ImGuiWindowFlags_MenuBar)) {
     ImGui::End();
     return;
   }
@@ -1105,27 +1104,28 @@ void updateNetworkView(GraphView& gv, char const* name)
   ImGui::End();
 }
 
-void updateAndDraw(GraphView& gv, char const* name)
+void updateAndDraw(GraphView& gv, char const* name, size_t id)
 {
-  updateNetworkView(gv, name);
-  updateInspectorView(gv, name);
+  auto networkName = fmt::format("Network {}##network{}{}", id, name, id);
+  auto inspectorName = fmt::format("Inspector {}##inspector{}{}", id, name, id);
+  updateNetworkView(gv, networkName.c_str());
+  updateInspectorView(gv, inspectorName.c_str());
 }
 
 void edit(Graph& graph, char const* name)
 {
   std::set<GraphView*> closedViews;
-  for (auto* view: graph.viewers()) {
+  auto viewers_cpy = graph.viewers();
+  for (auto* view: viewers_cpy) {
     if (!view->showNetwork) {
       closedViews.insert(view);
       continue;
     }
-    std::string viewname = fmt::format("Graph{}_View{}", name, view->id);
-    updateAndDraw(*view, viewname.c_str());
+    updateAndDraw(*view, name, view->id);
   }
 
   for(auto* view: closedViews) {
     graph.removeViewer(view);
-    delete view;
   }
 }
 
