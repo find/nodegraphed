@@ -101,8 +101,6 @@ class MyTestHook : public editorui::NodeGraphHook
 std::map<std::string, int> MyTestHook::typeNumericSuffix;
 
 editorui::Graph graph;
-editorui::GraphView view;
-editorui::GraphView view2;
 MyTestHook hook;
 
 void init()
@@ -147,14 +145,8 @@ void init()
   for (int i = 0; i < 20; ++i) {
     graph.addNode("node", glm::vec2(0, i*80.f));
   }
-  view.graph = &graph;
-  view.onGraphChanged();
-
-  view2.graph = &graph;
-  view2.onGraphChanged();
-
-  graph.addViewer(&view);
-  graph.addViewer(&view2);
+  graph.addViewer();
+  graph.addViewer();
 }
 
 bool show_demo_window = true;
@@ -164,8 +156,7 @@ float clear_color[3] = { 0.1f,0.1f,0.1f };
 
 void update() {
   ImGui::DockSpaceOverViewport();
-  editorui::updateAndDraw(view, "Node Graph");
-  editorui::updateAndDraw(view2, "Node Graph2");
+  editorui::edit(graph, "Demo NodeGraph");
 }
 
 void quit() {}

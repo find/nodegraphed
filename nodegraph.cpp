@@ -1,5 +1,6 @@
 #include "nodegraph.h"
 
+#define IMGUI_DEFINE_MATH_OPERATORS 1
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <spdlog/fmt/fmt.h>
@@ -56,18 +57,6 @@
 // [ ] anchor node
 
 // helpers {{{
-static inline ImVec2 operator+(const ImVec2& lhs, const ImVec2& rhs)
-{
-  return ImVec2(lhs.x + rhs.x, lhs.y + rhs.y);
-}
-static inline ImVec2 operator-(const ImVec2& lhs, const ImVec2& rhs)
-{
-  return ImVec2(lhs.x - rhs.x, lhs.y - rhs.y);
-}
-static inline ImVec2 operator*(const ImVec2& a, float b)
-{
-  return ImVec2{a.x * b, a.y * b};
-}
 static inline ImVec2 operator*(const glm::mat3& m, const ImVec2& v)
 {
   auto r = m * glm::vec3(v.x, v.y, 1.0f);
@@ -380,9 +369,11 @@ bool Graph::load(nlohmann::json const& section, std::string const& path)
 
 void updateInspectorView(GraphView& gv, char const* name)
 {
+  if (!gv.showInspector)
+    return;
   auto title = fmt::format("Inspector##inspector{}", name);
   ImGui::SetNextWindowSize(ImVec2{320, 480}, ImGuiCond_FirstUseEver);
-  if (!ImGui::Begin(title.c_str(), nullptr, ImGuiWindowFlags_MenuBar)) {
+  if (!ImGui::Begin(title.c_str(), &gv.showInspector, ImGuiWindowFlags_MenuBar)) {
     ImGui::End();
     return;
   }
@@ -724,7 +715,7 @@ static void confirmNewNodePlacing(GraphView& gv, ImVec2 const& pos)
 void updateNetworkView(GraphView& gv, char const* name)
 {
   ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
-  if (!ImGui::Begin(name, nullptr, ImGuiWindowFlags_MenuBar)) {
+  if (!ImGui::Begin(name, &gv.showNetwork, ImGuiWindowFlags_MenuBar)) {
     ImGui::End();
     return;
   }
@@ -770,6 +761,10 @@ void updateNetworkView(GraphView& gv, char const* name)
     if (ImGui::BeginMenu("View")) {
       ImGui::MenuItem("Name", nullptr, &gv.drawName);
       ImGui::MenuItem("Grid", nullptr, &gv.drawGrid);
+      ImGui::MenuItem("Inspector", nullptr, &gv.showInspector);
+      if (ImGui::MenuItem("New Window", nullptr, nullptr)) {
+        gv.graph->addViewer();
+      }
       ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Help")) {
@@ -1114,6 +1109,24 @@ void updateAndDraw(GraphView& gv, char const* name)
 {
   updateNetworkView(gv, name);
   updateInspectorView(gv, name);
+}
+
+void edit(Graph& graph, char const* name)
+{
+  std::set<GraphView*> closedViews;
+  for (auto* view: graph.viewers()) {
+    if (!view->showNetwork) {
+      closedViews.insert(view);
+      continue;
+    }
+    std::string viewname = fmt::format("Graph{}_View{}", name, view->id);
+    updateAndDraw(*view, viewname.c_str());
+  }
+
+  for(auto* view: closedViews) {
+    graph.removeViewer(view);
+    delete view;
+  }
 }
 
 } // namespace editorui

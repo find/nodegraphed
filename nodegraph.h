@@ -311,6 +311,8 @@ struct GraphView
   float     canvasScale  = 1;
   bool      drawGrid     = true;
   bool      drawName     = true;
+  bool      showNetwork  = true;
+  bool      showInspector = true;
   size_t    hoveredNode  = -1;
   size_t    activeNode   = -1;
   NodePin   hoveredPin   = {NodePin::NONE, size_t(-1), -1};
@@ -327,6 +329,7 @@ struct GraphView
   std::set<size_t> nodeSelection;
 
   Graph* graph = nullptr;
+  size_t id = 0;
 
   void onGraphChanged(); // callback when graph has changed
 };
@@ -342,9 +345,10 @@ protected:
   std::unordered_map<NodePin, std::vector<glm::vec2>>
       linkPathes_; // cached link pathes
   std::vector<size_t>  nodeOrder_;
-  std::set<GraphView*> viewers_;
+  std::vector<GraphView*> viewers_;
   NodeGraphHook*       hook_    = nullptr;
   void*                payload_ = nullptr;
+  size_t               nextViewerId_ = 0;
 
   void shiftToEnd(size_t nodeid)
   {
@@ -361,6 +365,12 @@ protected:
   }
 
 public:
+  ~Graph()
+  {
+    for (auto* v : viewers_)
+      delete v;
+  }
+
   auto const& nodes() const { return nodes_; }
   auto&       nodes() { return nodes_; }
   auto const& links() const { return links_; }
@@ -402,16 +412,20 @@ public:
   Node const& noderef(size_t idx) const { return nodes_.at(idx); }
   auto const& linkPath(NodePin const& pin) const { return linkPathes_.at(pin); }
 
-  void addViewer(GraphView* view)
+  void addViewer()
   {
-    if (view)
-      viewers_.insert(view);
+    GraphView* view = new GraphView;
+    view->graph = this;
+    view->onGraphChanged();
+    view->id = ++nextViewerId_;
+    viewers_.push_back(view);
   }
 
-  void removeViewer(GraphView* view)
+  void removeViewer(GraphView const* view)
   {
-    if (view)
-      viewers_.erase(view);
+    auto itr = std::find(viewers_.begin(), viewers_.end(), view);
+    if (itr!=viewers_.end())
+      viewers_.erase(itr);
   }
 
   void notifyViewers()
@@ -631,6 +645,6 @@ public:
   bool load(nlohmann::json const& section, std::string const& path);
 };
 
-void updateAndDraw(GraphView& graph, char const* name);
+void edit(Graph& graph, char const* name);
 
 } // namespace editorui
