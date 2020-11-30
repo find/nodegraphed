@@ -1053,10 +1053,10 @@ void updateNetworkView(GraphView& gv, char const* name)
 
 void updateDatasheetView(GraphView& gv, char const* name)
 {
-  if (!gv.showInspector)
+  if (!gv.showDatasheet)
     return;
   ImGui::SetNextWindowSize(ImVec2{ 320, 480 }, ImGuiCond_FirstUseEver);
-  if (!ImGui::Begin(name, &gv.showInspector)) {
+  if (!ImGui::Begin(name, &gv.showDatasheet)) {
     ImGui::End();
     return;
   }
