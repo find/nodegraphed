@@ -27,7 +27,7 @@
 // --------------------------------------------------------------------
 // [~] host real(logical) nodes & graphs
 // [ ] dive in nested network
-// [ ] serialization
+// [~] serialization
 // [~] edit common params in inspector when multiple nodes are selected
 // [~] long input list
 // [ ] data inspector
@@ -45,7 +45,7 @@
 // [ ] read-only view
 // [ ] editing policy / limited allowed action
 // [ ] syntax-highlighting text editor
-// [ ] window management
+// [~] window management
 // [ ] grid snapping
 // [ ] config-able appearance
 // [X] tab menu filter & completion
@@ -714,71 +714,9 @@ static void confirmNewNodePlacing(GraphView& gv, ImVec2 const& pos)
 void updateNetworkView(GraphView& gv, char const* name)
 {
   ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
-  if (!ImGui::Begin(name, &gv.showNetwork, ImGuiWindowFlags_MenuBar)) {
+  if (!ImGui::Begin(name, nullptr)) {
     ImGui::End();
     return;
-  }
-  if (ImGui::BeginMenuBar()) {
-    if (ImGui::BeginMenu("File")) {
-      if (ImGui::MenuItem("Open ...", nullptr, nullptr)) {
-        nfdchar_t* path = nullptr;
-        auto result = NFD_OpenDialog("json;graph", nullptr, &path);
-        if (result==NFD_OKAY && path) {
-          try {
-            std::ifstream ifile(path, std::ios::binary);
-            auto json = nlohmann::json::parse(ifile);
-            spdlog::info("loading graph from \"{}\"", path);
-            spdlog::info("loading {}", gv.graph->load(json, path) ? "succeed" : "failed");
-          } catch(std::exception const& e) {
-            spdlog::error("failed to load file \"{}\": {}", path, e.what());
-          }
-          free(path);
-        }
-      }
-      if (ImGui::MenuItem("Save ...", nullptr, nullptr)) {
-        nfdchar_t* path = nullptr;
-        auto result = NFD_SaveDialog("json;graph", nullptr, &path);
-        if (result==NFD_OKAY && path) {
-          std::ofstream ofile(path, std::ios::binary);
-          if (!ofile) {
-            spdlog::error("cannot open \"{}\" for writing", path);
-          } else {
-            nlohmann::json json;
-            spdlog::info("saving graph to \"{}\"", path);
-            spdlog::info("saving {}", gv.graph->save(json, path) ? "succeed" : "failed");
-            auto const& str = json.dump(2);
-            ofile.write(str.c_str(), str.length());
-            free(path);
-          }
-        }
-      }
-      if (ImGui::MenuItem("Quit", nullptr, nullptr)) {
-        // TODO
-      }
-      ImGui::EndMenu();
-    }
-    if (ImGui::BeginMenu("View")) {
-      ImGui::MenuItem("Name", nullptr, &gv.drawName);
-      ImGui::MenuItem("Grid", nullptr, &gv.drawGrid);
-      ImGui::MenuItem("Inspector", nullptr, &gv.showInspector);
-      if (ImGui::MenuItem("New Window", nullptr, nullptr)) {
-        gv.graph->addViewer();
-      }
-      ImGui::EndMenu();
-    }
-    if (ImGui::BeginMenu("Help")) {
-      if (ImGui::BeginMenu("Performance")) {
-        std::string fps    = fmt::format("FPS = {}", ImGui::GetIO().Framerate);
-        std::string vtxcnt = fmt::format("Vertices = {}", ImGui::GetIO().MetricsRenderVertices);
-        std::string idxcnt = fmt::format("Indices = {}", ImGui::GetIO().MetricsRenderIndices);
-        ImGui::MenuItem(fps.c_str(), nullptr, nullptr);
-        ImGui::MenuItem(vtxcnt.c_str(), nullptr, nullptr);
-        ImGui::MenuItem(idxcnt.c_str(), nullptr, nullptr);
-        ImGui::EndMenu();
-      }
-      ImGui::EndMenu();
-    }
-    ImGui::EndMenuBar();
   }
 
   ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32(25, 25, 25, 255));
@@ -1108,6 +1046,89 @@ void updateAndDraw(GraphView& gv, char const* name, size_t id)
 {
   auto networkName = fmt::format("Network {}##network{}{}", id, name, id);
   auto inspectorName = fmt::format("Inspector {}##inspector{}{}", id, name, id);
+  auto dockWindowName = fmt::format("View {}##dockwindow{}{}", id, name, id);
+  auto dockName = fmt::format("Dock_{}", dockWindowName);
+  auto dockID = ImGui::GetID(dockName.c_str());
+
+  ImGui::SetNextWindowSize(ImVec2(900, 700), ImGuiCond_FirstUseEver);
+  ImGui::Begin(dockWindowName.c_str(), &gv.showNetwork, ImGuiWindowFlags_MenuBar);
+  if (ImGui::BeginMenuBar()) {
+    if (ImGui::BeginMenu("File")) {
+      if (ImGui::MenuItem("Open ...", nullptr, nullptr)) {
+        nfdchar_t* path = nullptr;
+        auto result = NFD_OpenDialog("json;graph", nullptr, &path);
+        if (result == NFD_OKAY && path) {
+          try {
+            std::ifstream ifile(path, std::ios::binary);
+            auto json = nlohmann::json::parse(ifile);
+            spdlog::info("loading graph from \"{}\"", path);
+            spdlog::info("loading {}", gv.graph->load(json, path) ? "succeed" : "failed");
+          } catch (std::exception const& e) {
+            spdlog::error("failed to load file \"{}\": {}", path, e.what());
+          }
+          free(path);
+        }
+      }
+      if (ImGui::MenuItem("Save ...", nullptr, nullptr)) {
+        nfdchar_t* path = nullptr;
+        auto result = NFD_SaveDialog("json;graph", nullptr, &path);
+        if (result == NFD_OKAY && path) {
+          std::ofstream ofile(path, std::ios::binary);
+          if (!ofile) {
+            spdlog::error("cannot open \"{}\" for writing", path);
+          } else {
+            nlohmann::json json;
+            spdlog::info("saving graph to \"{}\"", path);
+            spdlog::info("saving {}", gv.graph->save(json, path) ? "succeed" : "failed");
+            auto const& str = json.dump(2);
+            ofile.write(str.c_str(), str.length());
+            free(path);
+          }
+        }
+      }
+      if (ImGui::MenuItem("Quit", nullptr, nullptr)) {
+        // TODO
+      }
+      ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("View")) {
+      ImGui::MenuItem("Name", nullptr, &gv.drawName);
+      ImGui::MenuItem("Grid", nullptr, &gv.drawGrid);
+      ImGui::MenuItem("Inspector", nullptr, &gv.showInspector);
+      if (ImGui::MenuItem("New Window", nullptr, nullptr)) {
+        gv.graph->addViewer();
+      }
+      ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Help")) {
+      if (ImGui::BeginMenu("Performance")) {
+        std::string fps = fmt::format("FPS = {}", ImGui::GetIO().Framerate);
+        std::string vtxcnt = fmt::format("Vertices = {}", ImGui::GetIO().MetricsRenderVertices);
+        std::string idxcnt = fmt::format("Indices = {}", ImGui::GetIO().MetricsRenderIndices);
+        ImGui::MenuItem(fps.c_str(), nullptr, nullptr);
+        ImGui::MenuItem(vtxcnt.c_str(), nullptr, nullptr);
+        ImGui::MenuItem(idxcnt.c_str(), nullptr, nullptr);
+        ImGui::EndMenu();
+      }
+      ImGui::EndMenu();
+    }
+    ImGui::EndMenuBar();
+  }
+
+  if (!gv.windowSetupDone) {
+    ImGuiID leftID = 0, rightID = 0;
+    ImGui::DockBuilderRemoveNode(dockID);
+    ImGui::DockBuilderAddNode(dockID, ImGuiDockNodeFlags_DockSpace|ImGuiDockNodeFlags_CentralNode|ImGuiDockNodeFlags_HiddenTabBar);
+    ImGui::DockBuilderSetNodeSize(dockID, ImGui::GetWindowSize());
+    ImGui::DockBuilderSplitNode(dockID, ImGuiDir_Left, 0.7f, &leftID, &rightID);
+    ImGui::DockBuilderDockWindow(networkName.c_str(), leftID);
+    ImGui::DockBuilderDockWindow(inspectorName.c_str(), rightID);
+    ImGui::DockBuilderFinish(dockID);
+    gv.windowSetupDone = true;
+  }
+  ImGui::DockSpace(dockID);
+  ImGui::End();
+
   updateNetworkView(gv, networkName.c_str());
   updateInspectorView(gv, inspectorName.c_str());
 }

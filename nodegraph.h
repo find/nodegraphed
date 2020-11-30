@@ -163,8 +163,7 @@ public:
     ANCHOR,     //< an anchor to route links,
                 //  implicitly has one input
                 //  and infinite number of outputs
-    COMMENTBOX, //< comment
-    GROUPBOX    //< grouping
+                //  (TODO: anchors)
   };
 
 private:
@@ -330,21 +329,31 @@ struct GraphView
 
   Graph* graph = nullptr;
   size_t id = 0;
+  bool   windowSetupDone = false;
 
   void onGraphChanged(); // callback when graph has changed
+};
+
+struct CommentBox
+{
+  glm::vec2   pos = { 0,0 };
+  glm::vec2   size = { 100,100 };
+  glm::vec4   color = { 1,1,1,1 };
+  std::string title = "";
+  std::string text = "";
 };
 
 class Graph
 {
 protected:
   std::unordered_map<size_t, Node> nodes_;
-  // std::vector<Link> links_;
   std::unordered_map<NodePin, NodePin>
       links_; // map from destiny to source, because each input pin accepts one
               // source only, but each output pin can be linked to many input pins
   std::unordered_map<NodePin, std::vector<glm::vec2>>
       linkPathes_; // cached link pathes
   std::vector<size_t>  nodeOrder_;
+  std::vector<CommentBox> comments_; // TODO: comments
   std::vector<GraphView*> viewers_;
   NodeGraphHook*       hook_    = nullptr;
   void*                payload_ = nullptr;
