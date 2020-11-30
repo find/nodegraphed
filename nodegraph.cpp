@@ -1118,11 +1118,13 @@ void updateAndDraw(GraphView& gv, char const* name, size_t id)
   if (!gv.windowSetupDone) {
     ImGuiID leftID = 0, rightID = 0;
     ImGui::DockBuilderRemoveNode(dockID);
-    ImGui::DockBuilderAddNode(dockID, ImGuiDockNodeFlags_DockSpace|ImGuiDockNodeFlags_CentralNode|ImGuiDockNodeFlags_HiddenTabBar);
+    ImGui::DockBuilderAddNode(dockID, ImGuiDockNodeFlags_PassthruCentralNode|ImGuiDockNodeFlags_HiddenTabBar);
     ImGui::DockBuilderSetNodeSize(dockID, ImGui::GetWindowSize());
     ImGui::DockBuilderSplitNode(dockID, ImGuiDir_Left, 0.7f, &leftID, &rightID);
     ImGui::DockBuilderDockWindow(networkName.c_str(), leftID);
     ImGui::DockBuilderDockWindow(inspectorName.c_str(), rightID);
+    ImGui::DockBuilderGetNode(leftID)->LocalFlags |= ImGuiDockNodeFlags_HiddenTabBar | ImGuiDockNodeFlags_NoCloseButton;
+    ImGui::DockBuilderGetNode(rightID)->LocalFlags |= ImGuiDockNodeFlags_HiddenTabBar | ImGuiDockNodeFlags_NoCloseButton;
     ImGui::DockBuilderFinish(dockID);
     gv.windowSetupDone = true;
   }
