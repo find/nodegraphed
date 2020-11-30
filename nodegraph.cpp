@@ -372,7 +372,7 @@ void updateInspectorView(GraphView& gv, char const* name)
   if (!gv.showInspector)
     return;
   ImGui::SetNextWindowSize(ImVec2{320, 480}, ImGuiCond_FirstUseEver);
-  if (!ImGui::Begin(name, &gv.showInspector, ImGuiWindowFlags_MenuBar)) {
+  if (!ImGui::Begin(name, &gv.showInspector)) {
     ImGui::End();
     return;
   }
@@ -381,24 +381,26 @@ void updateInspectorView(GraphView& gv, char const* name)
     ImGui::Text("Nothing selected");
   } else if (gv.nodeSelection.size() == 1) {
     auto  id   = *gv.nodeSelection.begin();
-    auto& node = gv.graph->noderef(id);
-    // ImGui::Text(node->name.c_str());
-    char namebuf[512] = {0};
-    memcpy(namebuf, node.name().c_str(), std::min(sizeof(namebuf), node.name().size()));
-    if (ImGui::InputText("##nodename",
-                         namebuf,
-                         sizeof(namebuf),
-                         ImGuiInputTextFlags_CharsNoBlank | ImGuiInputTextFlags_EnterReturnsTrue))
-      node.setName(namebuf);
-    // if (ImGui::SliderInt("Number of Inputs", &node.maxInputCount(), 0, 20))
-    //  gv.graph->updateLinkPath(id);
-    // if (ImGui::SliderInt("Number of Outputs", &node.outputCount(), 0, 20))
-    //  gv.graph->updateLinkPath(id);
-    auto color = node.color();
-    if (ImGui::ColorEdit4("Color", &color.r, ImGuiColorEditFlags_PickerHueWheel))
-      node.setColor(color);
+    if (id != -1) {
+      auto& node = gv.graph->noderef(id);
+      // ImGui::Text(node->name.c_str());
+      char namebuf[512] = { 0 };
+      memcpy(namebuf, node.name().c_str(), std::min(sizeof(namebuf), node.name().size()));
+      if (ImGui::InputText("##nodename",
+        namebuf,
+        sizeof(namebuf),
+        ImGuiInputTextFlags_CharsNoBlank | ImGuiInputTextFlags_EnterReturnsTrue))
+        node.setName(namebuf);
+      // if (ImGui::SliderInt("Number of Inputs", &node.maxInputCount(), 0, 20))
+      //  gv.graph->updateLinkPath(id);
+      // if (ImGui::SliderInt("Number of Outputs", &node.outputCount(), 0, 20))
+      //  gv.graph->updateLinkPath(id);
+      auto color = node.color();
+      if (ImGui::ColorEdit4("Color", &color.r, ImGuiColorEditFlags_PickerHueWheel))
+        node.setColor(color);
 
-    node.onInspect(gv);
+      node.onInspect(gv);
+    }
   } else {
     glm::vec4 avgColor = {0, 0, 0, 0};
     for (auto id : gv.nodeSelection) {
@@ -538,18 +540,25 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
                           cornerRounding(8.f * canvasScale));
 
       // Pins
-      for (int i = 0; i < node.maxInputCount(); ++i) {
-        size_t upnode   = gv.graph->upstreamNodeOf(idx, i);
-        auto   pincolor = color;
-        if (upnode != -1) {
-          pincolor = gv.graph->noderef(upnode).color();
-        }
-        auto const currentPin = NodePin{NodePin::INPUT, idx, i};
-        if (currentPin == gv.hoveredPin || currentPin == gv.activePin) {
-          pincolor = highlight(pincolor, 0.1f, 0.4f, 0.5f);
-        }
-        drawList->AddCircleFilled(
+      int icount = node.maxInputCount();
+      if (icount < 8) {
+        for (int i = 0; i < node.maxInputCount(); ++i) {
+          size_t upnode = gv.graph->upstreamNodeOf(idx, i);
+          auto   pincolor = color;
+          if (upnode != -1) {
+            pincolor = gv.graph->noderef(upnode).color();
+          }
+          auto const currentPin = NodePin{ NodePin::INPUT, idx, i };
+          if (currentPin == gv.hoveredPin || currentPin == gv.activePin) {
+            pincolor = highlight(pincolor, 0.1f, 0.4f, 0.5f);
+          }
+          drawList->AddCircleFilled(
             toScreen * imvec(node.inputPinPos(i)), pinRadius, imcolor(pincolor), pinSegs);
+        }
+      } else {
+        auto left = node.inputPinPos(0);
+        auto right = node.inputPinPos(icount - 1);
+        drawList->AddRectFilled(toScreen * imvec(left + glm::vec2{ 6,-6 }), toScreen * imvec(right + glm::vec2{ -6,0 }), imcolor(color), 6);
       }
       for (int i = 0; i < node.outputCount(); ++i) {
         auto const currentPin = NodePin{NodePin::OUTPUT, idx, i};
@@ -1042,10 +1051,30 @@ void updateNetworkView(GraphView& gv, char const* name)
   ImGui::End();
 }
 
+void updateDatasheetView(GraphView& gv, char const* name)
+{
+  if (!gv.showInspector)
+    return;
+  ImGui::SetNextWindowSize(ImVec2{ 320, 480 }, ImGuiCond_FirstUseEver);
+  if (!ImGui::Begin(name, &gv.showInspector)) {
+    ImGui::End();
+    return;
+  }
+
+  if (gv.nodeSelection.empty()) {
+    ImGui::Text("Nothing selected");
+  } else if (gv.nodeSelection.size() == 1 && *gv.nodeSelection.begin() != -1) {
+    gv.graph->noderef(*gv.nodeSelection.begin()).onInspectData(gv);
+  }
+
+  ImGui::End();
+}
+
 void updateAndDraw(GraphView& gv, char const* name, size_t id)
 {
   auto networkName = fmt::format("Network {}##network{}{}", id, name, id);
   auto inspectorName = fmt::format("Inspector {}##inspector{}{}", id, name, id);
+  auto datasheetName = fmt::format("Datasheet {}##datasheet{}{}", id, name, id);
   auto dockWindowName = fmt::format("View {}##dockwindow{}{}", id, name, id);
   auto dockName = fmt::format("Dock_{}", dockWindowName);
   auto dockID = ImGui::GetID(dockName.c_str());
@@ -1095,6 +1124,7 @@ void updateAndDraw(GraphView& gv, char const* name, size_t id)
       ImGui::MenuItem("Name", nullptr, &gv.drawName);
       ImGui::MenuItem("Grid", nullptr, &gv.drawGrid);
       ImGui::MenuItem("Inspector", nullptr, &gv.showInspector);
+      ImGui::MenuItem("Datasheet", nullptr, &gv.showDatasheet);
       if (ImGui::MenuItem("New Window", nullptr, nullptr)) {
         gv.graph->addViewer();
       }
@@ -1116,15 +1146,18 @@ void updateAndDraw(GraphView& gv, char const* name, size_t id)
   }
 
   if (!gv.windowSetupDone) {
-    ImGuiID leftID = 0, rightID = 0;
+    ImGuiID upID = 0, downID = 0, leftID = 0, rightID = 0;
     ImGui::DockBuilderRemoveNode(dockID);
     ImGui::DockBuilderAddNode(dockID, ImGuiDockNodeFlags_PassthruCentralNode|ImGuiDockNodeFlags_HiddenTabBar);
     ImGui::DockBuilderSetNodeSize(dockID, ImGui::GetWindowSize());
-    ImGui::DockBuilderSplitNode(dockID, ImGuiDir_Left, 0.7f, &leftID, &rightID);
+    ImGui::DockBuilderSplitNode(dockID, ImGuiDir_Up, 0.7f, &upID, &downID);
+    ImGui::DockBuilderSplitNode(upID, ImGuiDir_Left, 0.7f, &leftID, &rightID);
     ImGui::DockBuilderDockWindow(networkName.c_str(), leftID);
     ImGui::DockBuilderDockWindow(inspectorName.c_str(), rightID);
+    ImGui::DockBuilderDockWindow(datasheetName.c_str(), downID);
     ImGui::DockBuilderGetNode(leftID)->LocalFlags |= ImGuiDockNodeFlags_HiddenTabBar | ImGuiDockNodeFlags_NoCloseButton;
     ImGui::DockBuilderGetNode(rightID)->LocalFlags |= ImGuiDockNodeFlags_HiddenTabBar | ImGuiDockNodeFlags_NoCloseButton;
+    ImGui::DockBuilderGetNode(downID)->LocalFlags |= ImGuiDockNodeFlags_HiddenTabBar | ImGuiDockNodeFlags_NoCloseButton;
     ImGui::DockBuilderFinish(dockID);
     gv.windowSetupDone = true;
   }
@@ -1133,6 +1166,7 @@ void updateAndDraw(GraphView& gv, char const* name, size_t id)
 
   updateNetworkView(gv, networkName.c_str());
   updateInspectorView(gv, inspectorName.c_str());
+  updateDatasheetView(gv, datasheetName.c_str());
 }
 
 void edit(Graph& graph, char const* name)

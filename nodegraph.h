@@ -126,6 +126,9 @@ public:
   /// called when the UI node has been inspected
   virtual void onNodeInspect(Node* node, GraphView const& gv) {}
 
+  /// called when inspecting datasheet of this node
+  virtual void onNodeInspectData(Node* node, GraphView const& gv) {}
+
   virtual bool onNodeSelected(Node const* node, GraphView const& gv) { return true; }
   virtual void onNodeDeselected(Node const* node, GraphView const& gv) { }
   virtual bool onNodeClicked(Node const* node) { return true; }
@@ -287,6 +290,12 @@ public:
     if (hook_)
       hook_->onNodeInspect(this, gv);
   }
+
+  void onInspectData(GraphView const& gv)
+  {
+    if (hook_)
+      hook_->onNodeInspectData(this, gv);
+  }
 };
 
 class Graph;
@@ -312,6 +321,7 @@ struct GraphView
   bool      drawName     = true;
   bool      showNetwork  = true;
   bool      showInspector = true;
+  bool      showDatasheet = true;
   size_t    hoveredNode  = -1;
   size_t    activeNode   = -1;
   NodePin   hoveredPin   = {NodePin::NONE, size_t(-1), -1};
