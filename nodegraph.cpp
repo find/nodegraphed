@@ -386,7 +386,7 @@ void updateInspectorView(GraphView& gv, char const* name)
       // ImGui::Text(node->name.c_str());
       char namebuf[512] = { 0 };
       memcpy(namebuf, node.name().c_str(), std::min(sizeof(namebuf), node.name().size()));
-      if (ImGui::InputText("##nodename",
+      if (ImGui::InputText("Name##nodename",
         namebuf,
         sizeof(namebuf),
         ImGuiInputTextFlags_CharsNoBlank | ImGuiInputTextFlags_EnterReturnsTrue))
@@ -398,6 +398,8 @@ void updateInspectorView(GraphView& gv, char const* name)
       auto color = node.color();
       if (ImGui::ColorEdit4("Color", &color.r, ImGuiColorEditFlags_PickerHueWheel))
         node.setColor(color);
+
+      ImGui::Separator();
 
       node.onInspect(gv);
     }
@@ -1064,7 +1066,11 @@ void updateDatasheetView(GraphView& gv, char const* name)
   if (gv.nodeSelection.empty()) {
     ImGui::Text("Nothing selected");
   } else if (gv.nodeSelection.size() == 1 && *gv.nodeSelection.begin() != -1) {
-    gv.graph->noderef(*gv.nodeSelection.begin()).onInspectData(gv);
+    try {
+      gv.graph->noderef(*gv.nodeSelection.begin()).onInspectData(gv);
+    } catch(std::exception const& e) {
+      ImGui::Text("Error: %s", e.what());
+    }
   }
 
   ImGui::End();
