@@ -39,7 +39,7 @@
 // [X] highlight hovering pin
 // [X] optimize link routing
 // [X] focus to selected nodes / frame all nodes
-// [ ] copy / paste
+// [X] copy / paste
 // [ ] undo / redo / edit history tree
 // [ ] node shape
 // [ ] read-only view
@@ -277,9 +277,104 @@ void GraphView::onGraphChanged()
   }
 }
 
+void GraphView::copy()
+{
+  if (!nodeSelection.empty()) {
+    nlohmann::json json;
+    if (graph && graph->partialSave(json, nodeSelection)) {
+      ImGui::SetClipboardText(json.dump().c_str());
+    }
+  }
+}
+
+bool GraphView::paste()
+{
+  auto cb = ImGui::GetClipboardText();
+  try {
+    auto json = nlohmann::json::parse(cb);
+    if (!json.is_object())
+      return false;
+    return graph && graph->partialLoad(json, &nodeSelection);
+  } catch(nlohmann::json::parse_error const& e) {
+    spdlog::warn("json parse error: {}", e.what());
+    return false;
+  }
+}
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(glm::vec4, x, y, z, w);
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(glm::vec3, x, y, z);
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(glm::vec2, x, y);
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(NodePin, type, nodeIndex, pinNumber);
+
+bool Graph::partialSave(nlohmann::json& json, std::set<size_t> const& nodes)
+{
+  auto& uigraph = json["uigraph"];
+  auto& nodesection = uigraph["nodes"];
+  for (size_t id : nodes) {
+    auto const& node = noderef(id);
+    nlohmann::json nodedef;
+    nodedef["id"] = id;
+    nodedef["initialName"] = node.initialName();
+    nodedef["displayName"] = node.displayName();
+    nodedef["minInputs"] = node.minInputCount();
+    nodedef["maxInputs"] = node.maxInputCount();
+    nodedef["nOutputs"] = node.outputCount();
+    to_json(nodedef["color"], node.color());
+    to_json(nodedef["pos"], node.pos());
+    nodesection.push_back(nodedef);
+  }
+  auto& linksection = uigraph["links"];
+  for (auto const& link : links_) {
+    if (nodes.find(link.first.nodeIndex) != nodes.end()/* || nodes.find(link.second.nodeIndex) != nodes.end()*/) {
+      nlohmann::json linkdef;
+      linkdef["from"] = link.second;
+      linkdef["to"] = link.first;
+      linksection.push_back(linkdef);
+    }
+  }
+  return true;
+}
+
+bool Graph::partialLoad(nlohmann::json const& json, std::set<size_t> *outPastedNodes)
+{
+  if (!json.is_object() || json.find("uigraph") == json.end())
+    return false;
+  auto const& uigraph = json["uigraph"];
+  std::unordered_map<size_t, size_t> idMap;
+  for (auto const& nodedef: uigraph["nodes"]) {
+    glm::vec2 pos;
+    from_json(nodedef["pos"], pos);
+    auto newid = addNode(nodedef["initialName"], nodedef["displayName"], pos + glm::vec2(100, 100));
+    Node& node = noderef(newid);
+    node.numInputs_ = nodedef["maxInputs"];
+    node.numOutputs_ = nodedef["nOutputs"];
+    from_json(nodedef["color"], node.color_);
+
+    idMap[nodedef["id"]] = newid;
+  }
+  auto transpin = [&idMap](NodePin const& pin) {
+    auto itr = idMap.find(pin.nodeIndex);
+    return NodePin{ pin.type, itr == idMap.end() ? pin.nodeIndex : itr->second, pin.pinNumber };
+  };
+  for (auto const& linkdef: uigraph["links"]) {
+    auto to = transpin(linkdef["to"]);
+    auto from = transpin(linkdef["from"]);
+    if (nodes_.find(to.nodeIndex) != nodes_.end() && nodes_.find(from.nodeIndex) != nodes_.end())
+      addLink(from.nodeIndex, from.pinNumber, to.nodeIndex, to.pinNumber);
+  }
+  for (auto const& newitem: idMap) {
+    updateLinkPath(newitem.second);
+  }
+  this->notifyViewers();
+
+  if (outPastedNodes) {
+    outPastedNodes->clear();
+    for (auto const& newitem : idMap) {
+      outPastedNodes->insert(newitem.second);
+    }
+  }
+  return true;
+}
 
 bool Graph::save(nlohmann::json& section, std::string const& path)
 {
@@ -288,7 +383,8 @@ bool Graph::save(nlohmann::json& section, std::string const& path)
   for (auto const& n : nodes_) {
     nlohmann::json nodedef;
     nodedef["id"] = n.first;
-    nodedef["name"] = n.second.name();
+    nodedef["initialName"] = n.second.initialName();
+    nodedef["displayName"] = n.second.displayName();
     nodedef["minInputs"] = n.second.minInputCount();
     nodedef["maxInputs"] = n.second.maxInputCount();
     nodedef["nOutputs"] = n.second.outputCount();
@@ -330,7 +426,8 @@ bool Graph::load(nlohmann::json const& section, std::string const& path)
   size_t maxNodeId = 0;
   for (auto const& n: uigraph["nodes"]) {
     Node node;
-    node.name_ = n["name"];
+    node.initialName_ = n["initialName"];
+    node.displayName_ = n["displayName"];
     node.numInputs_ = n["maxInputs"];
     node.numOutputs_ = n["nOutputs"];
     node.hook_ = nullptr; // Hooks are processed later
@@ -358,6 +455,7 @@ bool Graph::load(nlohmann::json const& section, std::string const& path)
   for(auto const& n: nodes_)
     updateLinkPath(n.first);
 
+  this->notifyViewers();
   if(hook_) {
     return hook_->onLoad(this, section, path);
   }
@@ -385,12 +483,12 @@ void updateInspectorView(GraphView& gv, char const* name)
       auto& node = gv.graph->noderef(id);
       // ImGui::Text(node->name.c_str());
       char namebuf[512] = { 0 };
-      memcpy(namebuf, node.name().c_str(), std::min(sizeof(namebuf), node.name().size()));
+      memcpy(namebuf, node.displayName().c_str(), std::min(sizeof(namebuf), node.displayName().size()));
       if (ImGui::InputText("Name##nodename",
         namebuf,
         sizeof(namebuf),
         ImGuiInputTextFlags_CharsNoBlank | ImGuiInputTextFlags_EnterReturnsTrue))
-        node.setName(namebuf);
+        node.setDisplayName(namebuf);
       // if (ImGui::SliderInt("Number of Inputs", &node.maxInputCount(), 0, 20))
       //  gv.graph->updateLinkPath(id);
       // if (ImGui::SliderInt("Number of Outputs", &node.outputCount(), 0, 20))
@@ -577,7 +675,7 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
         drawList->AddText(ImVec2{center.x, center.y} +
                               ImVec2{size.x / 2.f * canvasScale + 8, -fontHeight / 2.f},
                           imcolor(highlight(color, -0.8f, 0.6f, 0.6f)),
-                          node.name().c_str());
+                          node.displayName().c_str());
       }
 
       node.onDraw(gv);
@@ -702,7 +800,7 @@ static void focusSelected(GraphView& gv)
 
 static void confirmNewNodePlacing(GraphView& gv, ImVec2 const& pos)
 {
-  size_t idx = gv.graph->addNode(gv.pendingNodeClass, glm::vec2(pos.x, pos.y));
+  size_t idx = gv.graph->addNode(gv.pendingNodeClass, gv.pendingNodeClass, glm::vec2(pos.x, pos.y));
   gv.activeNode = idx;
   gv.nodeSelection = { idx };
 
@@ -741,6 +839,7 @@ void updateNetworkView(GraphView& gv, char const* name)
   ImVec2 const mousePos          = ImGui::GetMousePos();
   ImVec2 const winPos            = ImGui::GetCursorScreenPos();
   ImVec2 const mouseDelta        = ImGui::GetIO().MouseDelta;
+  auto const   modKey            = ImGui::GetIO().KeyMods;
   auto&        graph             = *gv.graph;
   auto const   canvasScale       = gv.canvasScale;
   auto const   canvasOffset      = gv.canvasOffset;
@@ -853,12 +952,11 @@ void updateNetworkView(GraphView& gv, char const* name)
         }
       }
 
-      auto const modkey = ImGui::GetIO().KeyMods;
       if (gv.uiState == GraphView::UIState::VIEWING) {
         gv.selectionBoxStart = {mousePos.x, mousePos.y};
-        if (modkey & ImGuiKeyModFlags_Shift) {
+        if (modKey == ImGuiKeyModFlags_Shift) {
           gv.uiState = GraphView::UIState::BOX_SELECTING;
-        } else if (modkey & ImGuiKeyModFlags_Ctrl) {
+        } else if (modKey == ImGuiKeyModFlags_Ctrl) {
           gv.uiState = GraphView::UIState::BOX_DESELECTING;
         }
 
@@ -971,20 +1069,29 @@ void updateNetworkView(GraphView& gv, char const* name)
     }
 
     // Handle Keydown
-    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Enter))) {
+    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Enter))) { // confirm
       if (gv.uiState == GraphView::UIState::PLACING_NEW_NODE)
         confirmNewNodePlacing(gv, toCanvas * mousePos);
-    } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Delete))) {
+    } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Delete))) { // delete
       spdlog::debug("removing nodes [{}] from view {}", fmt::join(gv.nodeSelection, ", "), name);
       graph.removeNodes(gv.nodeSelection);
     } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Tab)) &&
-               gv.uiState == GraphView::UIState::VIEWING) {
+               gv.uiState == GraphView::UIState::VIEWING) { // new node
       ImGui::OpenPopup("Create Node");
     } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape)) &&
-               gv.uiState == GraphView::UIState::PLACING_NEW_NODE) {
+               gv.uiState == GraphView::UIState::PLACING_NEW_NODE) { // reset
       gv.uiState = GraphView::UIState::VIEWING;
-    } else if (ImGui::IsKeyPressed('F')) {
+    } else if (ImGui::IsKeyPressed('F')) { // focus
       focusSelected(gv);
+    } else if (ImGui::IsKeyPressed('C') && modKey==ImGuiKeyModFlags_Ctrl) { // copy
+      gv.copy();
+    } else if (ImGui::IsKeyPressed('V') && modKey==ImGuiKeyModFlags_Ctrl) { // paste
+      gv.paste();
+      gv.uiState = GraphView::UIState::VIEWING;
+    } else if (ImGui::IsKeyPressed('A') && modKey==ImGuiKeyModFlags_Ctrl) { // Select All
+      gv.nodeSelection.clear();
+      for (auto const& n : gv.graph->nodes())
+        gv.nodeSelection.insert(n.first);
     }
   } // Mouse inside canvas?
 
@@ -1141,9 +1248,13 @@ void updateAndDraw(GraphView& gv, char const* name, size_t id)
         std::string fps = fmt::format("FPS = {}", ImGui::GetIO().Framerate);
         std::string vtxcnt = fmt::format("Vertices = {}", ImGui::GetIO().MetricsRenderVertices);
         std::string idxcnt = fmt::format("Indices = {}", ImGui::GetIO().MetricsRenderIndices);
+        std::string nodecnt = fmt::format("Node Count = {}", gv.graph->nodes().size());
+        std::string linkcnt = fmt::format("Link Count = {}", gv.graph->links().size());
         ImGui::MenuItem(fps.c_str(), nullptr, nullptr);
         ImGui::MenuItem(vtxcnt.c_str(), nullptr, nullptr);
         ImGui::MenuItem(idxcnt.c_str(), nullptr, nullptr);
+        ImGui::MenuItem(nodecnt.c_str(), nullptr, nullptr);
+        ImGui::MenuItem(linkcnt.c_str(), nullptr, nullptr);
         ImGui::EndMenu();
       }
       ImGui::EndMenu();

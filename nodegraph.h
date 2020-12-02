@@ -171,14 +171,15 @@ public:
 
 private:
   friend class Graph;
-  Type           type_       = Type::NORMAL;
-  std::string    name_       = "";
-  int            numInputs_  = 4;
-  int            numOutputs_ = 1;
-  glm::vec2      pos_        = {0, 0};
-  glm::vec4      color_      = DEFAULT_NODE_COLOR;
-  void*          payload_    = nullptr;
-  NodeGraphHook* hook_       = nullptr;
+  Type           type_        = Type::NORMAL;
+  std::string    initialName_ = "";
+  std::string    displayName_ = "";
+  int            numInputs_   = 4;
+  int            numOutputs_  = 1;
+  glm::vec2      pos_         = {0, 0};
+  glm::vec4      color_       = DEFAULT_NODE_COLOR;
+  void*          payload_     = nullptr;
+  NodeGraphHook* hook_        = nullptr;
 
 public:
   void setHook(NodeGraphHook* hook) { hook_ = hook; }
@@ -187,12 +188,14 @@ public:
 
   void* payload() const { return payload_; }
 
-  std::string const& name() const { return name_; }
+  std::string const& initialName() const { return initialName_; }
 
-  void setName(std::string name)
+  std::string const& displayName() const { return displayName_; }
+
+  void setDisplayName(std::string name)
   {
     if (hook_ ? hook_->onNodeNameChanged(this, name, name) : true)
-      name_ = std::move(name);
+      displayName_ = std::move(name);
   }
 
   glm::vec2 pos() const { return pos_; }
@@ -342,6 +345,8 @@ struct GraphView
   bool   windowSetupDone = false;
 
   void onGraphChanged(); // callback when graph has changed
+  void copy();           // copy selection to clipboard
+  bool paste();          // paste content in clipboard to this graph
 };
 
 struct CommentBox
@@ -405,21 +410,22 @@ public:
 
   void setPayload(void* payload) { payload_ = payload; }
 
-  size_t addNode(std::string const& type, glm::vec2 const& pos, void* payload=nullptr)
+  size_t addNode(std::string const& name, std::string const& desiredName, glm::vec2 const& pos, void* payload=nullptr)
   {
     size_t id = -1;
-    std::string name = type;
+    std::string dispName = desiredName;
     void* nodepayload = payload
       ? payload
       : hook_
-        ? hook_->createNode(this, type, name, name)
+        ? hook_->createNode(this, name, desiredName, dispName)
         : nullptr;
     if (hook_ ? !!nodepayload : true) {
       id = NodeIdAllocator::instance().newId();
       Node node;
-      node.name_ = name;
-      node.pos_  = pos;
-      node.hook_ = hook_;
+      node.initialName_ = name;
+      node.displayName_ = dispName;
+      node.pos_         = pos;
+      node.hook_        = hook_;
       node.setPayload(nodepayload);
       nodes_.insert({id, node});
       nodeOrder_.push_back(id);
@@ -664,6 +670,12 @@ public:
     else
       return {};
   }
+  
+  // save & load a selection of nodes
+  // used for copy / pasting
+  // and (maybe) undo / redo
+  bool partialSave(nlohmann::json& json, std::set<size_t> const& nodes);
+  bool partialLoad(nlohmann::json const& json, std::set<size_t> *outPastedNodes=nullptr);
 
   bool save(nlohmann::json& section, std::string const& path);
   bool load(nlohmann::json const& section, std::string const& path);

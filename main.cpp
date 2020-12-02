@@ -75,7 +75,7 @@ class MyTestHook : public editorui::NodeGraphHook
           {"type", static_cast<RealNode const*>(node.second.payload())->type},
           {"name", static_cast<RealNode const*>(node.second.payload())->name} };
       } else {
-        spdlog::warn("node {}({}) has no payload??", node.first, node.second.name());
+        spdlog::warn("node {}({}) has no payload??", node.first, node.second.displayName());
       }
     }
     return true;
@@ -92,7 +92,7 @@ class MyTestHook : public editorui::NodeGraphHook
         node.second.setPayload(new RealNode{ type, name });
         node.second.setHook(this);
       } else {
-        spdlog::warn("node {}({}) has no mapping?", id, node.second.name());
+        spdlog::warn("node {}({}) has no mapping?", id, node.second.displayName());
       }
     }
     return true;
@@ -143,7 +143,7 @@ void init()
 
   graph.setHook(&hook);
   for (int i = 0; i < 20; ++i) {
-    graph.addNode("node", glm::vec2(0, i*80.f));
+    graph.addNode("node", "node", glm::vec2(0, i*80.f));
   }
   graph.addViewer();
   graph.addViewer();
