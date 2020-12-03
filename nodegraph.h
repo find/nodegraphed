@@ -681,6 +681,8 @@ public:
   bool load(nlohmann::json const& section, std::string const& path);
 };
 
+void init(); // TODO: config?
 void edit(Graph& graph, char const* name);
+void deinit();
 
 } // namespace editorui

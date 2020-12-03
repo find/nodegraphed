@@ -141,6 +141,7 @@ void init()
   colors[ImGuiCol_TextSelectedBg] = ImVec4(1.00f, 1.00f, 1.00f, 0.35f);
   colors[ImGuiCol_NavHighlight] = ImVec4(0.78f, 0.78f, 0.78f, 1.00f);
 
+  editorui::init();
   graph.setHook(&hook);
   for (int i = 0; i < 20; ++i) {
     graph.addNode("node", "node", glm::vec2(0, i*80.f));

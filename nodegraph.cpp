@@ -30,11 +30,11 @@
 // [~] serialization
 // [~] edit common params in inspector when multiple nodes are selected
 // [~] long input list
-// [ ] data inspector
+// [X] data inspector
 // [ ] bypass flag
 // [ ] output flag
 // [X] display names inside network
-// [ ] name font scale (2 levels?)
+// [X] name font scale
 // [X] drag link body to re-route
 // [X] highlight hovering pin
 // [X] optimize link routing
@@ -249,6 +249,41 @@ static ptrdiff_t longestCommonSequenceLength(std::string const& a, std::string c
 // helpers }}}
 
 namespace editorui {
+
+static auto& globalConfig()
+{
+  static struct {
+    struct {
+      ImFont* defaultFont = nullptr;
+      ImFont* strongFont = nullptr;
+      ImFont* largeFont = nullptr;
+      ImFont* largeStrongFont = nullptr;
+    } fonts;
+  } config;
+  return config;
+}
+
+void init()
+{
+  const unsigned int  get_roboto_medium_compressed_size();
+  const unsigned int* get_roboto_medium_compressed_data();
+
+  auto* atlas = ImGui::GetIO().Fonts;
+  auto* font  = atlas->AddFontFromMemoryCompressedTTF(get_roboto_medium_compressed_data(), get_roboto_medium_compressed_size(), 14, nullptr, atlas->GetGlyphRangesCyrillic());
+
+  globalConfig().fonts.defaultFont = font;
+  globalConfig().fonts.strongFont = font;
+
+  auto* largeFont = font = atlas->AddFontFromMemoryCompressedTTF(get_roboto_medium_compressed_data(), get_roboto_medium_compressed_size(), 28, nullptr, atlas->GetGlyphRangesCyrillic());
+
+  globalConfig().fonts.largeFont = largeFont;
+  globalConfig().fonts.largeStrongFont = largeFont;
+}
+
+void deinit()
+{
+  // TODO: deinit
+}
 
 NodeIdAllocator* NodeIdAllocator::instance_ = nullptr;
 NodeIdAllocator& NodeIdAllocator::instance()
@@ -625,8 +660,6 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
                                         ? highlight(node.color(), -0.1f, -0.4f)
                                         : node.color());
 
-    float const fontHeight = ImGui::GetFontSize();
-
     if (node.type() == Node::Type::NORMAL) {
       // Node itself
       drawList->AddRectFilled(
@@ -671,12 +704,17 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
       }
 
       // Name
+      if (canvasScale >= 1.5f && globalConfig().fonts.largeFont)
+        ImGui::PushFont(globalConfig().fonts.largeFont);
+      float const fontHeight = ImGui::GetFontSize();
       if (gv.drawName && canvasScale > 0.33) {
         drawList->AddText(ImVec2{center.x, center.y} +
                               ImVec2{size.x / 2.f * canvasScale + 8, -fontHeight / 2.f},
                           imcolor(highlight(color, -0.8f, 0.6f, 0.6f)),
                           node.displayName().c_str());
       }
+      if (canvasScale >= 1.5f && globalConfig().fonts.largeFont)
+        ImGui::PopFont();
 
       node.onDraw(gv);
     } else if (node.type() == Node::Type::ANCHOR) {
@@ -1288,6 +1326,8 @@ void updateAndDraw(GraphView& gv, char const* name, size_t id)
 
 void edit(Graph& graph, char const* name)
 {
+  if (globalConfig().fonts.defaultFont)
+    ImGui::PushFont(globalConfig().fonts.defaultFont);
   std::set<GraphView*> closedViews;
   auto viewers_cpy = graph.viewers();
   for (auto* view: viewers_cpy) {
@@ -1301,6 +1341,8 @@ void edit(Graph& graph, char const* name)
   for(auto* view: closedViews) {
     graph.removeViewer(view);
   }
+  if (globalConfig().fonts.defaultFont)
+    ImGui::PopFont();
 }
 
 } // namespace editorui
