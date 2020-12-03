@@ -367,6 +367,8 @@ bool Graph::partialSave(nlohmann::json& json, std::set<size_t> const& nodes)
       linksection.push_back(linkdef);
     }
   }
+  if (hook_)
+    return hook_->onPartialSave(this, json, nodes);
   return true;
 }
 
@@ -402,12 +404,16 @@ bool Graph::partialLoad(nlohmann::json const& json, std::set<size_t> *outPastedN
   }
   this->notifyViewers();
 
-  if (outPastedNodes) {
-    outPastedNodes->clear();
-    for (auto const& newitem : idMap) {
-      outPastedNodes->insert(newitem.second);
-    }
+  std::set<size_t> newNodes;
+  newNodes.clear();
+  for (auto const& newitem : idMap) {
+    newNodes.insert(newitem.second);
   }
+  if (outPastedNodes) {
+    *outPastedNodes = newNodes;
+  }
+  if (hook_)
+    return hook_->onPartialLoad(this, json, newNodes);
   return true;
 }
 

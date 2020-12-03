@@ -78,6 +78,20 @@ public:
   /// @return: succesfully loaded or not
   virtual bool onLoad(Graph* host, nlohmann::json const& jsobj, std::string const& path) { return false; }
 
+  /// serialize selection of nodes into json
+  /// @param host: the graph hosts this hook lives within
+  /// @param jsobj: the json section to write to
+  /// @param nodeset: the node selection to save
+  /// @return: succesfully saved or not
+  virtual bool onPartialSave(Graph const* host, nlohmann::json& jsobj, std::set<size_t> const& nodeset) { return true; }
+
+  /// deserialize selection of nodes from json
+  /// @param host: the graph hosts this hook lives within
+  /// @param jsobj: the json section to load from
+  /// @param nodeset: the node selection of given jsobj
+  /// @return: succesfully loaded or not
+  virtual bool onPartialLoad(Graph* host, nlohmann::json const& jsobj, std::set<size_t> const& nodeset) { return true; }
+
   /// creates a new custom graph
   virtual void* createGraph(Graph const* host) { return nullptr; }
 
