@@ -248,6 +248,10 @@ static ptrdiff_t longestCommonSequenceLength(std::string const& a, std::string c
 }
 // helpers }}}
 
+// font data:
+const unsigned int  get_roboto_medium_compressed_size();
+const unsigned int* get_roboto_medium_compressed_data();
+
 namespace editorui {
 
 static auto& globalConfig()
@@ -265,9 +269,6 @@ static auto& globalConfig()
 
 void init()
 {
-  const unsigned int  get_roboto_medium_compressed_size();
-  const unsigned int* get_roboto_medium_compressed_data();
-
   auto* atlas = ImGui::GetIO().Fonts;
   auto* font  = atlas->AddFontFromMemoryCompressedTTF(get_roboto_medium_compressed_data(), get_roboto_medium_compressed_size(), 14, nullptr, atlas->GetGlyphRangesCyrillic());
 
