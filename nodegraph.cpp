@@ -251,6 +251,8 @@ static ptrdiff_t longestCommonSequenceLength(std::string const& a, std::string c
 // font data:
 const unsigned int  get_roboto_medium_compressed_size();
 const unsigned int* get_roboto_medium_compressed_data();
+const unsigned int  get_sourcecodepro_compressed_size();
+const unsigned int* get_sourcecodepro_compressed_data();
 
 namespace editorui {
 
@@ -262,6 +264,7 @@ static auto& globalConfig()
       ImFont* strongFont = nullptr;
       ImFont* largeFont = nullptr;
       ImFont* largeStrongFont = nullptr;
+      ImFont* monoFont = nullptr;
     } fonts;
   } config;
   return config;
@@ -279,6 +282,8 @@ void init()
 
   globalConfig().fonts.largeFont = largeFont;
   globalConfig().fonts.largeStrongFont = largeFont;
+
+  globalConfig().fonts.monoFont = atlas->AddFontFromMemoryCompressedTTF(get_sourcecodepro_compressed_data(), get_sourcecodepro_compressed_size(), 14, nullptr, atlas->GetGlyphRangesCyrillic());
 }
 
 void deinit()
@@ -1215,15 +1220,25 @@ void updateDatasheetView(GraphView& gv, char const* name)
     return;
   }
 
-  if (gv.nodeSelection.empty()) {
-    ImGui::Text("Nothing selected");
-  } else if (gv.nodeSelection.size() == 1 && *gv.nodeSelection.begin() != -1) {
-    try {
-      gv.graph->noderef(*gv.nodeSelection.begin()).onInspectData(gv);
-    } catch(std::exception const& e) {
-      ImGui::Text("Error: %s", e.what());
+  ImGui::PushFont(globalConfig().fonts.monoFont);
+  if (ImGui::BeginTabBar("datasheet")) {
+    if (gv.nodeSelection.size() == 1 && *gv.nodeSelection.begin() != -1) {
+      if (ImGui::BeginTabItem("datasheet")) {
+        try {
+          gv.graph->noderef(*gv.nodeSelection.begin()).onInspectData(gv);
+        } catch (std::exception const& e) {
+          ImGui::Text("Error: %s", e.what());
+        }
+        ImGui::EndTabItem();
+      }
     }
+    if (ImGui::BeginTabItem("global state")) {
+      gv.graph->onInspectSummary(gv);
+      ImGui::EndTabItem();
+    }
+    ImGui::EndTabBar();
   }
+  ImGui::PopFont();
 
   ImGui::End();
 }
@@ -1288,6 +1303,10 @@ void updateAndDraw(GraphView& gv, char const* name, size_t id)
       }
       ImGui::EndMenu();
     }
+    if (ImGui::BeginMenu("Tools")) {
+      // TODO: custom tool menu
+      ImGui::EndMenu();
+    }
     if (ImGui::BeginMenu("Help")) {
       if (ImGui::BeginMenu("Performance")) {
         std::string fps = fmt::format("FPS = {}", ImGui::GetIO().Framerate);
@@ -1350,6 +1369,9 @@ void edit(Graph& graph, char const* name)
   }
   if (globalConfig().fonts.defaultFont)
     ImGui::PopFont();
+
+  // for style tweeking:
+  // ImGui::ShowStyleEditor();
 }
 
 } // namespace editorui

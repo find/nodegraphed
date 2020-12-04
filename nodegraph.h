@@ -141,7 +141,10 @@ public:
   virtual void onNodeInspect(Node* node, GraphView const& gv) {}
 
   /// called when inspecting datasheet of this node
-  virtual void onNodeInspectData(Node* node, GraphView const& gv) {}
+  virtual void onInspectNodeData(Node* node, GraphView const& gv) {}
+
+  /// called when inspecting summary of whole graph (i.e. when nothing was selected)
+  virtual void onInspectGraphSummary(Graph* graph, GraphView const& gv) {}
 
   virtual bool onNodeSelected(Node const* node, GraphView const& gv) { return true; }
   virtual void onNodeDeselected(Node const* node, GraphView const& gv) { }
@@ -208,7 +211,7 @@ public:
 
   void setDisplayName(std::string name)
   {
-    if (hook_ ? hook_->onNodeNameChanged(this, name, name) : true)
+    if (hook_ ? hook_->onNodeNameChanged(this, displayName_, name) : true)
       displayName_ = std::move(name);
   }
 
@@ -311,7 +314,7 @@ public:
   void onInspectData(GraphView const& gv)
   {
     if (hook_)
-      hook_->onNodeInspectData(this, gv);
+      hook_->onInspectNodeData(this, gv);
   }
 };
 
@@ -675,6 +678,12 @@ public:
     shiftToEnd(nodeid);
     if (hook_)
       hook_->onNodeDoubleClicked(&noderef(nodeid));
+  }
+
+  void onInspectSummary(GraphView const& gv)
+  {
+    if (hook_)
+      hook_->onInspectGraphSummary(this, gv);
   }
 
   std::vector<std::string> getNodeClassList() const
