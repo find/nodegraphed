@@ -1221,7 +1221,7 @@ void updateDatasheetView(GraphView& gv, char const* name)
   }
 
   ImGui::PushFont(globalConfig().fonts.monoFont);
-  if (ImGui::BeginTabBar("datasheet")) {
+  if (ImGui::BeginTabBar("datasheet", ImGuiTabBarFlags_AutoSelectNewTabs)) {
     if (gv.nodeSelection.size() == 1 && *gv.nodeSelection.begin() != -1) {
       if (ImGui::BeginTabItem("datasheet")) {
         try {
