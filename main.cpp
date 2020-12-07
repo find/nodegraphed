@@ -97,6 +97,14 @@ class MyTestHook : public editorui::NodeGraphHook
     }
     return true;
   }
+
+  void onNodeHovered(editorui::Node const* node) override {
+    if (auto* rn = static_cast<RealNode const*>(node->payload())) {
+      ImGui::BeginTooltip();
+      ImGui::Text("RealNode: %s", rn->name.c_str());
+      ImGui::EndTooltip();
+    }
+  }
 };
 std::map<std::string, int> MyTestHook::typeNumericSuffix;
 

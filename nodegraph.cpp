@@ -755,21 +755,17 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
                           false,
                           glm::clamp(1.f * gv.canvasScale, 1.0f, 4.0f));
   };
-  if (gv.uiState == GraphView::UIState::DRAGGING_LINK_HEAD ||
-      (gv.uiState == GraphView::UIState::PLACING_NEW_NODE &&
-       gv.pendingLink.destiny.type != NodePin::NONE)) {
+  if (gv.pendingLink.source.type == NodePin::NONE && gv.pendingLink.destiny.type != NodePin::NONE) {
     glm::vec2 curveEnd = gv.graph->noderef(gv.pendingLink.destiny.nodeIndex)
                              .inputPinPos(gv.pendingLink.destiny.pinNumber);
     glm::vec2 curveStart = glmvec(toCanvas * mousePos);
     drawLink(curveStart, curveEnd);
-  } else if (gv.uiState == GraphView::UIState::DRAGGING_LINK_TAIL ||
-             (gv.uiState == GraphView::UIState::PLACING_NEW_NODE &&
-              gv.pendingLink.source.type != NodePin::NONE)) {
+  } else if (gv.pendingLink.destiny.type == NodePin::NONE && gv.pendingLink.source.type != NodePin::NONE) {
     glm::vec2 curveStart = gv.graph->noderef(gv.pendingLink.source.nodeIndex)
                                .outputPinPos(gv.pendingLink.source.pinNumber);
     glm::vec2 curveEnd = glmvec(toCanvas * mousePos);
     drawLink(curveStart, curveEnd);
-  } else if (gv.uiState == GraphView::UIState::DRAGGING_LINK_BODY) {
+  } else if (gv.pendingLink.source.type != NodePin::NONE && gv.pendingLink.destiny.type != NodePin::NONE) {
     glm::vec2 curveStart = gv.graph->noderef(gv.pendingLink.source.nodeIndex)
                                .outputPinPos(gv.pendingLink.source.pinNumber);
     glm::vec2 curveEnd = gv.graph->noderef(gv.pendingLink.destiny.nodeIndex)
@@ -952,7 +948,6 @@ void updateNetworkView(GraphView& gv, char const* name)
       }
     }
   }
-
   // Mouse action - the dirty part
   if (mouseInsideCanvas && ImGui::IsWindowHovered()) {
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
@@ -960,7 +955,7 @@ void updateNetworkView(GraphView& gv, char const* name)
       clickedPin    = hoveredPin;
       gv.activeNode = clickedNode;
       if (clickedNode != -1) {
-        graph.onNodeClicked(clickedNode);
+        graph.onNodeClicked(clickedNode, 0);
         gv.uiState = GraphView::UIState::DRAGGING_NODES;
         if (gv.nodeSelection.find(clickedNode) == gv.nodeSelection.end()) {
           gv.nodeSelection = {clickedNode};
@@ -1001,7 +996,16 @@ void updateNetworkView(GraphView& gv, char const* name)
           }
         }
       }
-
+      if (hoveredNode != -1) {
+        graph.onNodeHovered(hoveredNode);
+      }
+      if (hoveredPin.type != NodePin::NONE) {
+        graph.onPinHovered(hoveredPin);
+      }
+      if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+        if (clickedNode != -1)
+          graph.onNodeDoubleClicked(clickedNode, 1);
+      }
       if (gv.uiState == GraphView::UIState::VIEWING) {
         gv.selectionBoxStart = {mousePos.x, mousePos.y};
         if (modKey == ImGuiKeyModFlags_Shift) {
@@ -1018,10 +1022,6 @@ void updateNetworkView(GraphView& gv, char const* name)
             gv.nodeSelection.erase(clickedNode);
         }
       }
-    }
-    if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
-      if (clickedNode != -1)
-        graph.onNodeDoubleClicked(clickedNode);
     }
     if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
       if (gv.uiState == GraphView::UIState::BOX_SELECTING ||
@@ -1068,17 +1068,47 @@ void updateNetworkView(GraphView& gv, char const* name)
         if (hoveredPin.type == NodePin::INPUT &&
             hoveredPin.nodeIndex != gv.pendingLink.source.nodeIndex) {
           gv.graph->removeLink(gv.pendingLink.destiny.nodeIndex, gv.pendingLink.destiny.pinNumber);
+          if (modKey == ImGuiKeyModFlags_Alt) { // swap link
+            auto const& pendingSrc = gv.pendingLink.source;
+            auto const& pendingDst = gv.pendingLink.destiny;
+            auto hvitr = gv.graph->links().find(hoveredPin);
+            if (hvitr != gv.graph->links().end()) {
+              auto const& hoverSource = hvitr->second;
+              gv.graph->addLink(hoverSource.nodeIndex, hoverSource.pinNumber, pendingDst.nodeIndex, pendingDst.pinNumber);
+            }
+          }
           gv.graph->addLink(gv.pendingLink.source.nodeIndex,
                             gv.pendingLink.source.pinNumber,
                             hoveredPin.nodeIndex,
                             hoveredPin.pinNumber);
+          gv.pendingLink = {};
         } else if (hoveredPin.type == NodePin::OUTPUT &&
                    hoveredPin.nodeIndex != gv.pendingLink.destiny.nodeIndex) {
+          if (modKey == ImGuiKeyModFlags_Alt) { // swap link
+            auto cnt = std::count_if(gv.graph->links().begin(), gv.graph->links().end(),
+              [hoveredPin](std::pair<NodePin, NodePin> const& rec) {
+                return rec.second == hoveredPin;
+              });
+            if (cnt == 1) { // do swaping only when there is only one dest connection
+              auto hvitr = std::find_if(gv.graph->links().begin(), gv.graph->links().end(),
+                [hoveredPin](std::pair<NodePin, NodePin> const& rec) {
+                  return rec.second == hoveredPin;
+                });
+              if (hvitr != gv.graph->links().end()) {
+                auto pditr = gv.graph->links().find(gv.pendingLink.destiny);
+                if (pditr != gv.graph->links().end()) {
+                  // add link from pending link's source to hovered pin's destiny
+                  gv.graph->addLink(pditr->second.nodeIndex, pditr->second.pinNumber, hvitr->first.nodeIndex, hvitr->first.pinNumber);
+                }
+              }
+            }
+          }
           gv.graph->removeLink(gv.pendingLink.destiny.nodeIndex, gv.pendingLink.destiny.pinNumber);
           gv.graph->addLink(hoveredPin.nodeIndex,
                             hoveredPin.pinNumber,
                             gv.pendingLink.destiny.nodeIndex,
                             gv.pendingLink.destiny.pinNumber);
+          gv.pendingLink = {};
         } else if (hoveredNode != -1) {
           gv.graph->removeLink(gv.pendingLink.destiny.nodeIndex, gv.pendingLink.destiny.pinNumber);
           auto const& node = gv.graph->noderef(hoveredNode);
@@ -1092,8 +1122,10 @@ void updateNetworkView(GraphView& gv, char const* name)
                               gv.pendingLink.destiny.nodeIndex,
                               gv.pendingLink.destiny.pinNumber);
           }
+          gv.pendingLink = {};
+        } else {
+          ImGui::OpenPopup("Create Node");
         }
-        gv.pendingLink = {};
       }
       gv.uiState = GraphView::UIState::VIEWING;
     }

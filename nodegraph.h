@@ -153,8 +153,10 @@ public:
 
   virtual bool onNodeSelected(Node const* node, GraphView const& gv) { return true; }
   virtual void onNodeDeselected(Node const* node, GraphView const& gv) { }
-  virtual bool onNodeClicked(Node const* node) { return true; }
-  virtual bool onNodeDoubleClicked(Node const* node) { return true; }
+  virtual bool onNodeClicked(Node const* node, int mouseButton) { return true; }
+  virtual void onNodeHovered(Node const* node) {}
+  virtual bool onNodeDoubleClicked(Node const* node, int mouseButton) { return true; }
+  virtual void onPinHovered(Node const* node, NodePin const& pin) {}
   virtual bool onNodeMovedTo(Node* node, glm::vec2 const& pos) { return true; }
   virtual bool nodeCanBeDeleted(Node* node) { return true; }
   virtual void beforeDeleteNode(Node* node) {}
@@ -671,18 +673,30 @@ public:
     }
   }
 
-  void onNodeClicked(size_t nodeid)
+  void onNodeHovered(size_t nodeid)
   {
-    shiftToEnd(nodeid);
     if (hook_)
-      hook_->onNodeClicked(&noderef(nodeid));
+      hook_->onNodeHovered(&noderef(nodeid));
   }
 
-  void onNodeDoubleClicked(size_t nodeid)
+  void onPinHovered(NodePin const& pin)
+  {
+    if (hook_)
+      hook_->onPinHovered(&noderef(pin.nodeIndex), pin);
+  }
+
+  void onNodeClicked(size_t nodeid, int mouseButton)
   {
     shiftToEnd(nodeid);
     if (hook_)
-      hook_->onNodeDoubleClicked(&noderef(nodeid));
+      hook_->onNodeClicked(&noderef(nodeid), mouseButton);
+  }
+
+  void onNodeDoubleClicked(size_t nodeid, int mouseButton)
+  {
+    shiftToEnd(nodeid);
+    if (hook_)
+      hook_->onNodeDoubleClicked(&noderef(nodeid), mouseButton);
   }
 
   void onInspectSummary(GraphView const& gv)
