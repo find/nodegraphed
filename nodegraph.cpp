@@ -1049,6 +1049,8 @@ void updateNetworkView(GraphView& gv, char const* name)
           gv.pendingLink = {};
         } else if (hoveredNode == -1 && hoveredPin.type == NodePin::NONE) {
           ImGui::OpenPopup("Create Node");
+        } else {
+          gv.pendingLink = {};
         }
       } else if (gv.uiState == GraphView::UIState::DRAGGING_LINK_TAIL) {
         if (hoveredPin.type == NodePin::INPUT) {
@@ -1063,6 +1065,8 @@ void updateNetworkView(GraphView& gv, char const* name)
           gv.pendingLink = {};
         } else if (hoveredNode == -1 && hoveredPin.type == NodePin::NONE) {
           ImGui::OpenPopup("Create Node");
+        } else {
+          gv.pendingLink = {};
         }
       } else if (gv.uiState == GraphView::UIState::DRAGGING_LINK_BODY) {
         if (hoveredPin.type == NodePin::INPUT &&
