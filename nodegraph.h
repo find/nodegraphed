@@ -89,8 +89,13 @@ public:
   /// @param host: the graph hosts this hook lives within
   /// @param jsobj: the json section to load from
   /// @param nodeset: the node selection of given jsobj
+  /// @param idmap: map from old nodeid to new node id on partial node
   /// @return: succesfully loaded or not
-  virtual bool onPartialLoad(Graph* host, nlohmann::json const& jsobj, std::set<size_t> const& nodeset) { return true; }
+  virtual bool onPartialLoad( Graph* host,
+                              nlohmann::json const& jsobj,
+                              std::set<size_t> const& nodeset,
+                              std::unordered_map<size_t, size_t> const& idmap)
+  { return true; }
 
   /// creates a new custom graph
   virtual void* createGraph(Graph const* host) { return nullptr; }

@@ -29,7 +29,7 @@
 // [ ] dive in nested network
 // [~] serialization
 // [~] edit common params in inspector when multiple nodes are selected
-// [~] long input list
+// [ ] long input list
 // [X] data inspector
 // [ ] bypass flag
 // [ ] output flag
@@ -419,7 +419,7 @@ bool Graph::partialLoad(nlohmann::json const& json, std::set<size_t> *outPastedN
     *outPastedNodes = newNodes;
   }
   if (hook_)
-    return hook_->onPartialLoad(this, json, newNodes);
+    return hook_->onPartialLoad(this, json, newNodes, idMap);
   return true;
 }
 
@@ -583,7 +583,7 @@ static int circleSegs(float radius)
   //0, 1, 2, 3, 4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15
     4, 4, 6, 6, 7,  8,  9,  9,  9, 10, 10, 12, 12, 13, 13, 14
   };
-  if (radius<sizeof(lut)/sizeof(lut[0])) {
+  if (int(radius)<sizeof(lut)/sizeof(lut[0])) {
     return lut[int(radius)];
   } else {
     return std::max(36, int(radius));
