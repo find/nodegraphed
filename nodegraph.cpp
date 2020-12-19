@@ -457,6 +457,7 @@ bool Graph::save(nlohmann::json& section, std::string const& path)
   return true;
 }
 
+static void focusSelected(GraphView& gv);
 bool Graph::load(nlohmann::json const& section, std::string const& path)
 {
   if (hook_) {
@@ -503,6 +504,9 @@ bool Graph::load(nlohmann::json const& section, std::string const& path)
     updateLinkPath(n.first);
 
   this->notifyViewers();
+  for (auto *v: viewers_) {
+    focusSelected(*v);
+  }
   if(hook_) {
     return hook_->onLoad(this, section, path);
   }
@@ -841,6 +845,16 @@ static void focusSelected(GraphView& gv)
 
     gv.canvasOffset = -glm::vec2((aabb.min.x + aabb.max.x) / 2.f, (aabb.min.y + aabb.max.y) / 2.f);
     gv.canvasScale = 1.f;
+  } else if (!gv.graph->nodes().empty()) { // if nothing is selected, view the whole graph
+    auto itr = gv.graph->nodes().begin();
+    AABB<glm::vec2> aabb(gv.graph->nodes().begin()->second.pos());
+    for (++itr; itr!=gv.graph->nodes().end(); ++itr) {
+      aabb.merge(itr->second.pos());
+    }
+    
+    gv.canvasOffset = -glm::vec2((aabb.min.x + aabb.max.x) / 2.f, (aabb.min.y + aabb.max.y) / 2.f);
+    aabb.expand(20);
+    gv.canvasScale = std::min(1.f, std::min(gv.canvasSize.x / aabb.size().x, gv.canvasSize.y / aabb.size().y));
   }
 }
 
@@ -900,6 +914,7 @@ void updateNetworkView(GraphView& gv, char const* name)
   size_t  clickedNode = -1;
   NodePin hoveredPin  = {NodePin::NONE, size_t(-1), -1},
           clickedPin  = {NodePin::NONE, size_t(-1), -1};
+  gv.canvasSize       = glm::vec2(canvasSize.x, canvasSize.y);
   gv.selectionBoxEnd  = glm::vec2(mousePos.x, mousePos.y);
 
   std::set<size_t> unconfirmedNodeSelection = gv.nodeSelection;

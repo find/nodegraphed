@@ -343,6 +343,7 @@ struct GraphView
   };
 
   glm::vec2 canvasOffset = {0, 0};
+  glm::vec2 canvasSize   = {0, 0};
   float     canvasScale  = 1;
   bool      drawGrid     = true;
   bool      drawName     = true;
