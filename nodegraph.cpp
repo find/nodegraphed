@@ -610,8 +610,8 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
   auto const   canvasArea         = AABB<ImVec2>(winPos, winPos + canvasSize);
   bool const   cursorInsideCanvas = canvasArea.contains(mousePos);
 
-  glm::mat3 const toScreen = calcToScreenMatrix(gv, canvasArea);
-  glm::mat3 const toCanvas = glm::inverse(toScreen);
+  glm::mat3 const& toScreen = gv.canvasToScreen;
+  glm::mat3 const& toCanvas = gv.screenToCanvas;
 
   ImDrawList* drawList = ImGui::GetWindowDrawList();
 
@@ -909,6 +909,8 @@ void updateNetworkView(GraphView& gv, char const* name)
 
   glm::mat3 const toScreen = calcToScreenMatrix(gv, canvasArea);
   glm::mat3 const toCanvas = glm::inverse(toScreen);
+  gv.canvasToScreen = toScreen;
+  gv.screenToCanvas = toCanvas;
 
   size_t  hoveredNode = -1;
   size_t  clickedNode = -1;
@@ -1161,12 +1163,14 @@ void updateNetworkView(GraphView& gv, char const* name)
     if (abs(ImGui::GetIO().MouseWheel) > 0.1) {
       gv.canvasScale = glm::clamp(gv.canvasScale + ImGui::GetIO().MouseWheel / 20.f, 0.1f, 10.f);
       // cursor as scale center:
-      glm::mat3  newXform     = calcToScreenMatrix(gv, canvasArea);
-      auto const cc           = mousePos;
-      auto const ccInOldLocal = toCanvas * cc;
-      auto const ccInNewLocal = glm::inverse(newXform) * cc;
+      auto canvasToScreen      = calcToScreenMatrix(gv, canvasArea);
+      auto screenToCanvas      = glm::inverse(canvasToScreen);
+      auto const cc            = mousePos;
+      auto const ccInOldCanvas = toCanvas * cc;
+      auto const ccInNewCanvas = screenToCanvas * cc;
+
       gv.canvasOffset +=
-          glm::vec2(ccInNewLocal.x - ccInOldLocal.x, ccInNewLocal.y - ccInOldLocal.y);
+          glm::vec2(ccInNewCanvas.x - ccInOldCanvas.x, ccInNewCanvas.y - ccInOldCanvas.y);
     }
 
     // Handle Keydown
