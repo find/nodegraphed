@@ -653,7 +653,7 @@ public:
           ++itr;
         }
       }
-      if (hook_ && bypassHook) {
+      if (hook_ && !bypassHook) {
         hook_->beforeDeleteNode(&noderef(idx));
       }
       nodes_.erase(idx);
