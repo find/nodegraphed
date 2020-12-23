@@ -151,6 +151,9 @@ public:
   /// called when inspecting summary of whole graph (i.e. when nothing was selected)
   virtual void onInspectGraphSummary(Graph* graph, GraphView const& gv) {}
 
+  /// called when `Tools` menu was clicked - add your own menu here
+  virtual void onToolMenu(Graph* graph, GraphView const& gv) {}
+
   virtual bool onNodeSelected(Node const* node, GraphView const& gv) { return true; }
   virtual void onNodeDeselected(Node const* node, GraphView const& gv) { }
   virtual bool onNodeClicked(Node const* node, int mouseButton) { return true; }
@@ -341,6 +344,13 @@ struct GraphView
     DRAGGING_LINK_TAIL,
     CUTING_LINK,
   };
+  enum class Kind : uint8_t
+  {
+    EVERYTHING, // Network + Inspector + Data Inspector
+    NETWORK,    // Network only
+    INSPECTOR,  // Inspector only
+    DATASHEET,  // Datasheet only
+  };
 
   glm::vec2 canvasOffset = {0, 0};
   glm::vec2 canvasSize   = {0, 0};
@@ -362,6 +372,8 @@ struct GraphView
   glm::vec2   selectionBoxEnd   = {0, 0};
   Link        pendingLink       = {{NodePin::NONE, size_t(-1), -1}, {NodePin::NONE, size_t(-1), -1}};
   std::string pendingNodeClass  = "node";
+  Kind        kind              = Kind::EVERYTHING;
+  size_t      focusingNode      = -1; // for deteched inspector / data inspector view
 
   glm::vec2 pendingLinkPos;
   std::vector<glm::vec2> linkCuttingStroke;
@@ -397,6 +409,7 @@ protected:
   std::vector<size_t>  nodeOrder_;
   std::vector<CommentBox> comments_; // TODO: comments
   std::vector<GraphView*> viewers_;
+  std::string          savePath_;
   NodeGraphHook*       hook_    = nullptr;
   void*                payload_ = nullptr;
   size_t               nextViewerId_ = 0;
@@ -437,6 +450,10 @@ public:
 
   void setPayload(void* payload) { payload_ = payload; }
 
+  std::string const& savePath() const { return savePath_; }
+
+  void setSavePath(std::string path) { savePath_ = std::move(path); }
+
   size_t addNode(std::string const& name, std::string const& desiredName, glm::vec2 const& pos, void* payload=nullptr)
   {
     size_t id = -1;
@@ -464,13 +481,15 @@ public:
   Node const& noderef(size_t idx) const { return nodes_.at(idx); }
   auto const& linkPath(NodePin const& pin) const { return linkPathes_.at(pin); }
 
-  void addViewer()
+  GraphView* addViewer(GraphView::Kind kind = GraphView::Kind::EVERYTHING)
   {
     GraphView* view = new GraphView;
     view->graph = this;
+    view->kind = kind;
     view->onGraphChanged();
     view->id = ++nextViewerId_;
     viewers_.push_back(view);
+    return view;
   }
 
   void removeViewer(GraphView const* view)

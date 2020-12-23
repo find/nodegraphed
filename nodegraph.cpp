@@ -315,6 +315,12 @@ void GraphView::onGraphChanged()
     }
     if (activeNode != -1 && graph->nodes().find(activeNode) != graph->nodes().end())
       activeNode = -1;
+    if (graph->nodes().find(focusingNode) == graph->nodes().end()) {
+      if (kind == Kind::INSPECTOR)
+        showInspector = false;
+      if (kind == Kind::DATASHEET)
+        showDatasheet = false;
+    }
   }
 }
 
@@ -1303,106 +1309,163 @@ void updateAndDraw(GraphView& gv, char const* name, size_t id)
   auto networkName = fmt::format("Network {}##network{}{}", id, name, id);
   auto inspectorName = fmt::format("Inspector {}##inspector{}{}", id, name, id);
   auto datasheetName = fmt::format("Datasheet {}##datasheet{}{}", id, name, id);
-  auto dockWindowName = fmt::format("View {}##dockwindow{}{}", id, name, id);
-  auto dockName = fmt::format("Dock_{}", dockWindowName);
-  auto dockID = ImGui::GetID(dockName.c_str());
 
-  ImGui::SetNextWindowSize(ImVec2(900, 700), ImGuiCond_FirstUseEver);
-  ImGui::Begin(dockWindowName.c_str(), &gv.showNetwork, ImGuiWindowFlags_MenuBar);
-  if (ImGui::BeginMenuBar()) {
-    if (ImGui::BeginMenu("File")) {
-      if (ImGui::MenuItem("Open ...", nullptr, nullptr)) {
-        nfdchar_t* path = nullptr;
-        auto result = NFD_OpenDialog("json;graph", nullptr, &path);
-        if (result == NFD_OKAY && path) {
-          try {
-            std::ifstream ifile(path, std::ios::binary);
-            auto json = nlohmann::json::parse(ifile);
-            spdlog::info("loading graph from \"{}\"", path);
-            spdlog::info("loading {}", gv.graph->load(json, path) ? "succeed" : "failed");
-          } catch (std::exception const& e) {
-            spdlog::error("failed to load file \"{}\": {}", path, e.what());
-          }
-          free(path);
+  if (gv.kind == GraphView::Kind::EVERYTHING) {
+    auto dockWindowName = fmt::format("View {}##dockwindow{}{}", id, name, id);
+    auto dockName = fmt::format("Dock_{}", dockWindowName);
+    auto dockID = ImGui::GetID(dockName.c_str());
+
+    ImGui::SetNextWindowSize(ImVec2(900, 700), ImGuiCond_FirstUseEver);
+    ImGui::Begin(dockWindowName.c_str(), &gv.showNetwork, ImGuiWindowFlags_MenuBar);
+    if (ImGui::BeginMenuBar()) {
+      if (ImGui::BeginMenu("File")) {
+        if (ImGui::MenuItem("New", nullptr, nullptr)) {
+          // TODO
         }
-      }
-      if (ImGui::MenuItem("Save ...", nullptr, nullptr)) {
-        nfdchar_t* path = nullptr;
-        auto result = NFD_SaveDialog("json;graph", nullptr, &path);
-        if (result == NFD_OKAY && path) {
-          std::ofstream ofile(path, std::ios::binary);
-          if (!ofile) {
-            spdlog::error("cannot open \"{}\" for writing", path);
-          } else {
-            nlohmann::json json;
-            spdlog::info("saving graph to \"{}\"", path);
-            spdlog::info("saving {}", gv.graph->save(json, path) ? "succeed" : "failed");
-            auto const& str = json.dump(2);
-            ofile.write(str.c_str(), str.length());
+        if (ImGui::MenuItem("Open ...", nullptr, nullptr)) {
+          nfdchar_t* path = nullptr;
+          auto result = NFD_OpenDialog("json;graph", nullptr, &path);
+          if (result == NFD_OKAY && path) {
+            try {
+              std::ifstream ifile(path, std::ios::binary);
+              auto json = nlohmann::json::parse(ifile);
+              spdlog::info("loading graph from \"{}\"", path);
+              spdlog::info("loading {}", gv.graph->load(json, path) ? "succeed" : "failed");
+            } catch (std::exception const& e) {
+              spdlog::error("failed to load file \"{}\": {}", path, e.what());
+            }
             free(path);
           }
         }
-      }
-      if (ImGui::MenuItem("Quit", nullptr, nullptr)) {
-        // TODO
-      }
-      ImGui::EndMenu();
-    }
-    if (ImGui::BeginMenu("View")) {
-      ImGui::MenuItem("Name", nullptr, &gv.drawName);
-      ImGui::MenuItem("Grid", nullptr, &gv.drawGrid);
-      ImGui::MenuItem("Inspector", nullptr, &gv.showInspector);
-      ImGui::MenuItem("Datasheet", nullptr, &gv.showDatasheet);
-      if (ImGui::MenuItem("New Window", nullptr, nullptr)) {
-        gv.graph->addViewer();
-      }
-      ImGui::EndMenu();
-    }
-    if (ImGui::BeginMenu("Tools")) {
-      // TODO: custom tool menu
-      ImGui::EndMenu();
-    }
-    if (ImGui::BeginMenu("Help")) {
-      if (ImGui::BeginMenu("Performance")) {
-        std::string fps = fmt::format("FPS = {}", ImGui::GetIO().Framerate);
-        std::string vtxcnt = fmt::format("Vertices = {}", ImGui::GetIO().MetricsRenderVertices);
-        std::string idxcnt = fmt::format("Indices = {}", ImGui::GetIO().MetricsRenderIndices);
-        std::string nodecnt = fmt::format("Node Count = {}", gv.graph->nodes().size());
-        std::string linkcnt = fmt::format("Link Count = {}", gv.graph->links().size());
-        ImGui::MenuItem(fps.c_str(), nullptr, nullptr);
-        ImGui::MenuItem(vtxcnt.c_str(), nullptr, nullptr);
-        ImGui::MenuItem(idxcnt.c_str(), nullptr, nullptr);
-        ImGui::MenuItem(nodecnt.c_str(), nullptr, nullptr);
-        ImGui::MenuItem(linkcnt.c_str(), nullptr, nullptr);
+        if (ImGui::MenuItem("Save", "Ctrl + S", nullptr) ||
+            (ImGui::IsKeyPressed('S') && ImGui::GetMergedKeyModFlags()==ImGuiKeyModFlags_Ctrl)) {
+          if (gv.graph->savePath().empty()) {
+            nfdchar_t* path = nullptr;
+            auto result = NFD_SaveDialog("json;graph", nullptr, &path);
+            if (result == NFD_OKAY && path) {
+              gv.graph->setSavePath(path);
+              free(path);
+            }
+          }
+          std::ofstream ofile(gv.graph->savePath(), std::ios::binary);
+          if (!ofile) {
+            spdlog::error("cannot open \"{}\" for writing", gv.graph->savePath());
+            gv.graph->setSavePath("");
+          } else {
+            nlohmann::json json;
+            spdlog::info("saving graph to \"{}\"", gv.graph->savePath());
+            spdlog::info("saving {}", gv.graph->save(json, gv.graph->savePath()) ? "succeed" : "failed");
+            auto const& str = json.dump(2);
+            ofile.write(str.c_str(), str.length());
+          }
+        }
+        if (ImGui::MenuItem("Save As ...", nullptr, nullptr)) {
+          nfdchar_t* path = nullptr;
+          auto result = NFD_SaveDialog("json;graph", nullptr, &path);
+          if (result == NFD_OKAY && path) {
+            std::ofstream ofile(path, std::ios::binary);
+            if (!ofile) {
+              spdlog::error("cannot open \"{}\" for writing", path);
+            } else {
+              nlohmann::json json;
+              spdlog::info("saving graph to \"{}\"", path);
+              spdlog::info("saving {}", gv.graph->save(json, path) ? "succeed" : "failed");
+              auto const& str = json.dump(2);
+              ofile.write(str.c_str(), str.length());
+              free(path);
+
+              gv.graph->setSavePath(path);
+            }
+          }
+        }
+        if (ImGui::MenuItem("Quit", nullptr, nullptr)) {
+          // TODO
+        }
         ImGui::EndMenu();
       }
-      ImGui::EndMenu();
+      if (ImGui::BeginMenu("View")) {
+        ImGui::MenuItem("Name", nullptr, &gv.drawName);
+        ImGui::MenuItem("Grid", nullptr, &gv.drawGrid);
+        ImGui::MenuItem("Inspector", nullptr, &gv.showInspector);
+        ImGui::MenuItem("Datasheet", nullptr, &gv.showDatasheet);
+        if (ImGui::BeginMenu("New View")) {
+          if (ImGui::MenuItem("Main Window", nullptr, nullptr)) {
+            gv.graph->addViewer();
+          }
+          if (ImGui::MenuItem("Network")) {
+            auto* view = gv.graph->addViewer();
+            view->nodeSelection = gv.nodeSelection;
+            focusSelected(*view);
+          }
+          if (gv.nodeSelection.size()==1 && ImGui::MenuItem("Inspector")) {
+            auto focus = *gv.nodeSelection.begin();
+            if (focus!=-1) {
+              auto* view = gv.graph->addViewer(GraphView::Kind::INSPECTOR);
+              view->focusingNode = focus;
+            }
+          }
+          if (gv.nodeSelection.size()==1 && ImGui::MenuItem("Datasheet")) {
+            auto focus = *gv.nodeSelection.begin();
+            if (focus!=-1) {
+              auto* view = gv.graph->addViewer(GraphView::Kind::DATASHEET);
+              view->focusingNode = focus;
+            }
+          }
+          ImGui::EndMenu();
+        }
+        ImGui::EndMenu();
+      }
+      if (ImGui::BeginMenu("Tools")) {
+        if (auto* hook=gv.graph->hook()) {
+          hook->onToolMenu(gv.graph, gv);
+        }
+        ImGui::EndMenu();
+      }
+      if (ImGui::BeginMenu("Help")) {
+        if (ImGui::BeginMenu("Performance")) {
+          std::string fps = fmt::format("FPS = {}", ImGui::GetIO().Framerate);
+          std::string vtxcnt = fmt::format("Vertices = {}", ImGui::GetIO().MetricsRenderVertices);
+          std::string idxcnt = fmt::format("Indices = {}", ImGui::GetIO().MetricsRenderIndices);
+          std::string nodecnt = fmt::format("Node Count = {}", gv.graph->nodes().size());
+          std::string linkcnt = fmt::format("Link Count = {}", gv.graph->links().size());
+          ImGui::MenuItem(fps.c_str(),    nullptr, nullptr);
+          ImGui::MenuItem(vtxcnt.c_str(), nullptr, nullptr);
+          ImGui::MenuItem(idxcnt.c_str(), nullptr, nullptr);
+          ImGui::MenuItem(nodecnt.c_str(), nullptr, nullptr);
+          ImGui::MenuItem(linkcnt.c_str(), nullptr, nullptr);
+          ImGui::EndMenu();
+        }
+        ImGui::EndMenu();
+      }
+      ImGui::EndMenuBar();
     }
-    ImGui::EndMenuBar();
+
+    if (!gv.windowSetupDone) {
+      ImGuiID upID = 0, downID = 0, leftID = 0, rightID = 0;
+      ImGui::DockBuilderRemoveNode(dockID);
+      ImGui::DockBuilderAddNode(dockID, ImGuiDockNodeFlags_PassthruCentralNode|ImGuiDockNodeFlags_HiddenTabBar);
+      ImGui::DockBuilderSetNodeSize(dockID, ImGui::GetWindowSize());
+      ImGui::DockBuilderSplitNode(dockID, ImGuiDir_Up, 0.7f, &upID, &downID);
+      ImGui::DockBuilderSplitNode(upID, ImGuiDir_Left, 0.7f, &leftID, &rightID);
+      ImGui::DockBuilderDockWindow(networkName.c_str(), leftID);
+      ImGui::DockBuilderDockWindow(inspectorName.c_str(), rightID);
+      ImGui::DockBuilderDockWindow(datasheetName.c_str(), downID);
+      ImGui::DockBuilderGetNode(leftID)->LocalFlags |= ImGuiDockNodeFlags_HiddenTabBar | ImGuiDockNodeFlags_NoCloseButton;
+      ImGui::DockBuilderGetNode(rightID)->LocalFlags |= ImGuiDockNodeFlags_HiddenTabBar | ImGuiDockNodeFlags_NoCloseButton;
+      ImGui::DockBuilderGetNode(downID)->LocalFlags |= ImGuiDockNodeFlags_HiddenTabBar | ImGuiDockNodeFlags_NoCloseButton;
+      ImGui::DockBuilderFinish(dockID);
+      gv.windowSetupDone = true;
+    }
+    ImGui::DockSpace(dockID);
+    ImGui::End();
   }
 
-  if (!gv.windowSetupDone) {
-    ImGuiID upID = 0, downID = 0, leftID = 0, rightID = 0;
-    ImGui::DockBuilderRemoveNode(dockID);
-    ImGui::DockBuilderAddNode(dockID, ImGuiDockNodeFlags_PassthruCentralNode|ImGuiDockNodeFlags_HiddenTabBar);
-    ImGui::DockBuilderSetNodeSize(dockID, ImGui::GetWindowSize());
-    ImGui::DockBuilderSplitNode(dockID, ImGuiDir_Up, 0.7f, &upID, &downID);
-    ImGui::DockBuilderSplitNode(upID, ImGuiDir_Left, 0.7f, &leftID, &rightID);
-    ImGui::DockBuilderDockWindow(networkName.c_str(), leftID);
-    ImGui::DockBuilderDockWindow(inspectorName.c_str(), rightID);
-    ImGui::DockBuilderDockWindow(datasheetName.c_str(), downID);
-    ImGui::DockBuilderGetNode(leftID)->LocalFlags |= ImGuiDockNodeFlags_HiddenTabBar | ImGuiDockNodeFlags_NoCloseButton;
-    ImGui::DockBuilderGetNode(rightID)->LocalFlags |= ImGuiDockNodeFlags_HiddenTabBar | ImGuiDockNodeFlags_NoCloseButton;
-    ImGui::DockBuilderGetNode(downID)->LocalFlags |= ImGuiDockNodeFlags_HiddenTabBar | ImGuiDockNodeFlags_NoCloseButton;
-    ImGui::DockBuilderFinish(dockID);
-    gv.windowSetupDone = true;
-  }
-  ImGui::DockSpace(dockID);
-  ImGui::End();
-
-  updateNetworkView(gv, networkName.c_str());
-  updateInspectorView(gv, inspectorName.c_str());
-  updateDatasheetView(gv, datasheetName.c_str());
+  if (gv.kind == GraphView::Kind::EVERYTHING || gv.kind == GraphView::Kind::NETWORK)
+    updateNetworkView(gv, networkName.c_str());
+  if (gv.kind == GraphView::Kind::EVERYTHING || gv.kind == GraphView::Kind::INSPECTOR)
+    updateInspectorView(gv, inspectorName.c_str());
+  if (gv.kind == GraphView::Kind::EVERYTHING || gv.kind == GraphView::Kind::DATASHEET)
+    updateDatasheetView(gv, datasheetName.c_str());
 }
 
 void edit(Graph& graph, char const* name)
@@ -1412,7 +1475,9 @@ void edit(Graph& graph, char const* name)
   std::set<GraphView*> closedViews;
   auto viewers_cpy = graph.viewers();
   for (auto* view: viewers_cpy) {
-    if (!view->showNetwork) {
+    if ((view->kind == GraphView::Kind::INSPECTOR && !view->showInspector) ||
+        (view->kind == GraphView::Kind::DATASHEET && !view->showDatasheet) ||
+        !view->showNetwork) {
       closedViews.insert(view);
       continue;
     }
