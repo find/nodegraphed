@@ -283,7 +283,11 @@ void init()
   globalConfig().fonts.largeFont = largeFont;
   globalConfig().fonts.largeStrongFont = largeFont;
 
-  globalConfig().fonts.monoFont = atlas->AddFontFromMemoryCompressedTTF(get_sourcecodepro_compressed_data(), get_sourcecodepro_compressed_size(), 14, nullptr, atlas->GetGlyphRangesCyrillic());
+  // TODO: read config file
+  globalConfig().fonts.monoFont = atlas->AddFontFromFileTTF("res/sarasa-mono-sc-regular.ttf", 14, nullptr, atlas->GetGlyphRangesChineseSimplifiedCommon());
+  if (!globalConfig().fonts.monoFont) {
+    globalConfig().fonts.monoFont = atlas->AddFontFromMemoryCompressedTTF(get_sourcecodepro_compressed_data(), get_sourcecodepro_compressed_size(), 14, nullptr, atlas->GetGlyphRangesChineseSimplifiedCommon());
+  }
 }
 
 void deinit()
@@ -531,46 +535,51 @@ void updateInspectorView(GraphView& gv, char const* name)
     ImGui::End();
     return;
   }
+  auto inspect = [&gv](size_t id)
+  {
+    auto& node = gv.graph->noderef(id);
+    // ImGui::Text(node->name.c_str());
+    char namebuf[512] = { 0 };
+    memcpy(namebuf, node.displayName().c_str(), std::min(sizeof(namebuf), node.displayName().size()));
+    if (ImGui::InputText("Name##nodename",
+      namebuf,
+      sizeof(namebuf),
+      ImGuiInputTextFlags_CharsNoBlank | ImGuiInputTextFlags_EnterReturnsTrue))
+      node.setDisplayName(namebuf);
+    // if (ImGui::SliderInt("Number of Inputs", &node.maxInputCount(), 0, 20))
+    //  gv.graph->updateLinkPath(id);
+    // if (ImGui::SliderInt("Number of Outputs", &node.outputCount(), 0, 20))
+    //  gv.graph->updateLinkPath(id);
+    auto color = node.color();
+    if (ImGui::ColorEdit4("Color", &color.r, ImGuiColorEditFlags_PickerHueWheel))
+      node.setColor(color);
 
-  if (gv.nodeSelection.empty()) {
-    ImGui::Text("Nothing selected");
-  } else if (gv.nodeSelection.size() == 1) {
-    auto  id   = *gv.nodeSelection.begin();
-    if (id != -1) {
-      auto& node = gv.graph->noderef(id);
-      // ImGui::Text(node->name.c_str());
-      char namebuf[512] = { 0 };
-      memcpy(namebuf, node.displayName().c_str(), std::min(sizeof(namebuf), node.displayName().size()));
-      if (ImGui::InputText("Name##nodename",
-        namebuf,
-        sizeof(namebuf),
-        ImGuiInputTextFlags_CharsNoBlank | ImGuiInputTextFlags_EnterReturnsTrue))
-        node.setDisplayName(namebuf);
-      // if (ImGui::SliderInt("Number of Inputs", &node.maxInputCount(), 0, 20))
-      //  gv.graph->updateLinkPath(id);
-      // if (ImGui::SliderInt("Number of Outputs", &node.outputCount(), 0, 20))
-      //  gv.graph->updateLinkPath(id);
-      auto color = node.color();
-      if (ImGui::ColorEdit4("Color", &color.r, ImGuiColorEditFlags_PickerHueWheel))
-        node.setColor(color);
+    ImGui::Separator();
 
-      ImGui::Separator();
-
-      node.onInspect(gv);
-    }
-  } else {
-    glm::vec4 avgColor = {0, 0, 0, 0};
-    for (auto id : gv.nodeSelection) {
-      avgColor += gv.graph->noderef(id).color();
-    }
-    avgColor /= float(gv.nodeSelection.size());
-    if (ImGui::ColorPicker4("Color", &avgColor.r, ImGuiColorEditFlags_PickerHueWheel)) {
+    node.onInspect(gv);
+  };
+  if (gv.focusingNode != -1)
+    inspect(gv.focusingNode);
+  else {
+    if (gv.nodeSelection.empty()) {
+      ImGui::Text("Nothing selected");
+    } else if (gv.nodeSelection.size() == 1) {
+      auto  id = *gv.nodeSelection.begin();
+      if (id != -1)
+        inspect(id);
+    } else {
+      glm::vec4 avgColor = { 0, 0, 0, 0 };
       for (auto id : gv.nodeSelection) {
-        gv.graph->noderef(id).setColor(avgColor);
+        avgColor += gv.graph->noderef(id).color();
       }
+      avgColor /= float(gv.nodeSelection.size());
+      if (ImGui::ColorPicker4("Color", &avgColor.r, ImGuiColorEditFlags_PickerHueWheel)) {
+        for (auto id : gv.nodeSelection) {
+          gv.graph->noderef(id).setColor(avgColor);
+        }
+      }
+      // TODO: multi-editing
     }
-
-    // TODO: multi-editing
   }
 
   ImGui::End();
@@ -889,7 +898,7 @@ static void confirmNewNodePlacing(GraphView& gv, ImVec2 const& pos)
 void updateNetworkView(GraphView& gv, char const* name)
 {
   ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
-  if (!ImGui::Begin(name, nullptr)) {
+  if (!ImGui::Begin(name, gv.kind==GraphView::Kind::EVERYTHING ? nullptr : &gv.showNetwork)) {
     ImGui::End();
     return;
   }
@@ -1282,22 +1291,30 @@ void updateDatasheetView(GraphView& gv, char const* name)
   }
 
   ImGui::PushFont(globalConfig().fonts.monoFont);
-  if (ImGui::BeginTabBar("datasheet", ImGuiTabBarFlags_AutoSelectNewTabs)) {
-    if (gv.nodeSelection.size() == 1 && *gv.nodeSelection.begin() != -1) {
-      if (ImGui::BeginTabItem("datasheet")) {
-        try {
-          gv.graph->noderef(*gv.nodeSelection.begin()).onInspectData(gv);
-        } catch (std::exception const& e) {
-          ImGui::Text("Error: %s", e.what());
+  if (gv.focusingNode != -1) {
+    try {
+      gv.graph->noderef(gv.focusingNode).onInspectData(gv);
+    } catch (std::exception const& e) {
+      ImGui::Text("Error: %s", e.what());
+    }
+  } else {
+    if (ImGui::BeginTabBar("datasheet", ImGuiTabBarFlags_AutoSelectNewTabs)) {
+      if (gv.nodeSelection.size() == 1 && *gv.nodeSelection.begin() != -1) {
+        if (ImGui::BeginTabItem("datasheet")) {
+          try {
+            gv.graph->noderef(*gv.nodeSelection.begin()).onInspectData(gv);
+          } catch (std::exception const& e) {
+            ImGui::Text("Error: %s", e.what());
+          }
+          ImGui::EndTabItem();
         }
+      }
+      if (ImGui::BeginTabItem("global state")) {
+        gv.graph->onInspectSummary(gv);
         ImGui::EndTabItem();
       }
+      ImGui::EndTabBar();
     }
-    if (ImGui::BeginTabItem("global state")) {
-      gv.graph->onInspectSummary(gv);
-      ImGui::EndTabItem();
-    }
-    ImGui::EndTabBar();
   }
   ImGui::PopFont();
 
@@ -1306,9 +1323,12 @@ void updateDatasheetView(GraphView& gv, char const* name)
 
 void updateAndDraw(GraphView& gv, char const* name, size_t id)
 {
+  std::string focusing = "";
+  if (gv.focusingNode != -1)
+    focusing = fmt::format(" ({})", gv.graph->noderef(gv.focusingNode).displayName());
   auto networkName = fmt::format("Network {}##network{}{}", id, name, id);
-  auto inspectorName = fmt::format("Inspector {}##inspector{}{}", id, name, id);
-  auto datasheetName = fmt::format("Datasheet {}##datasheet{}{}", id, name, id);
+  auto inspectorName = fmt::format("Inspector {}{}##inspector{}{}", id, focusing, name, id);
+  auto datasheetName = fmt::format("Datasheet {}{}##datasheet{}{}", id, focusing, name, id);
 
   if (gv.kind == GraphView::Kind::EVERYTHING) {
     auto dockWindowName = fmt::format("View {}##dockwindow{}{}", id, name, id);
@@ -1393,7 +1413,7 @@ void updateAndDraw(GraphView& gv, char const* name, size_t id)
             gv.graph->addViewer();
           }
           if (ImGui::MenuItem("Network")) {
-            auto* view = gv.graph->addViewer();
+            auto* view = gv.graph->addViewer(GraphView::Kind::NETWORK);
             view->nodeSelection = gv.nodeSelection;
             focusSelected(*view);
           }
@@ -1402,6 +1422,7 @@ void updateAndDraw(GraphView& gv, char const* name, size_t id)
             if (focus!=-1) {
               auto* view = gv.graph->addViewer(GraphView::Kind::INSPECTOR);
               view->focusingNode = focus;
+              view->showInspector = true;
             }
           }
           if (gv.nodeSelection.size()==1 && ImGui::MenuItem("Datasheet")) {
@@ -1409,6 +1430,7 @@ void updateAndDraw(GraphView& gv, char const* name, size_t id)
             if (focus!=-1) {
               auto* view = gv.graph->addViewer(GraphView::Kind::DATASHEET);
               view->focusingNode = focus;
+              view->showDatasheet = true;
             }
           }
           ImGui::EndMenu();
