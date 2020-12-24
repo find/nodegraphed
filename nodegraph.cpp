@@ -379,6 +379,7 @@ bool Graph::partialSave(nlohmann::json& json, std::set<size_t> const& nodes)
     if (nodes.find(link.first.nodeIndex) != nodes.end()/* || nodes.find(link.second.nodeIndex) != nodes.end()*/) {
       nlohmann::json linkdef;
       linkdef["from"] = link.second;
+      linkdef["fromname"] = noderef(link.second.nodeIndex).displayName();
       linkdef["to"] = link.first;
       linksection.push_back(linkdef);
     }
@@ -411,7 +412,23 @@ bool Graph::partialLoad(nlohmann::json const& json, std::set<size_t> *outPastedN
   };
   for (auto const& linkdef: uigraph["links"]) {
     auto to = transpin(linkdef["to"]);
-    auto from = transpin(linkdef["from"]);
+    NodePin from = linkdef["from"];
+    // auto from = transpin(linkdef["from"]);
+    if (auto itr = idMap.find(from.nodeIndex); itr!=idMap.end())
+      from.nodeIndex = itr->second;
+    // resolve link by display name - for copy-pasting between totally different graphs
+    // where ids makes no sense
+    else if (linkdef.find("fromname")!=linkdef.end()) {
+      if (auto sourceitr=std::find_if(
+            nodes_.begin(), nodes_.end(),
+            [name=std::string(linkdef["fromname"])](auto const& pair) {
+              return pair.second.displayName()==name;
+            });
+          sourceitr!=nodes_.end())
+      {
+        from.nodeIndex = sourceitr->first;
+      }
+    }
     if (nodes_.find(to.nodeIndex) != nodes_.end() && nodes_.find(from.nodeIndex) != nodes_.end())
       addLink(from.nodeIndex, from.pinNumber, to.nodeIndex, to.pinNumber);
   }
