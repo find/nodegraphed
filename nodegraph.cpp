@@ -49,7 +49,7 @@
 // [ ] grid snapping
 // [ ] config-able appearance
 // [X] tab menu filter & completion
-// [ ] link swaping
+// [X] link swaping
 // [ ] node swaping
 // [X] drag link head/tail to empty space creates new node
 // [ ] comment box
