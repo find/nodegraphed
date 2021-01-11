@@ -143,10 +143,12 @@ public:
   virtual void onGraphDraw(Graph const* host, GraphView const& gv) {}
 
   /// called when the UI node has been inspected
-  virtual void onNodeInspect(Node* node, GraphView const& gv) {}
+  /// return: the node been modified (true) or not (false)
+  virtual bool onNodeInspect(Node* node, GraphView const& gv) { return false; }
 
   /// called when inspecting datasheet of this node
-  virtual void onInspectNodeData(Node* node, GraphView const& gv) {}
+  /// return: the node been modified (true) or not (false)
+  virtual bool onInspectNodeData(Node* node, GraphView const& gv) { return false; }
 
   /// called when inspecting summary of whole graph (i.e. when nothing was selected)
   virtual void onInspectGraphSummary(Graph* graph, GraphView const& gv) {}
@@ -315,16 +317,18 @@ public:
       hook_->onNodeDraw(this, gv);
   }
 
-  void onInspect(GraphView const& gv)
+  bool onInspect(GraphView const& gv)
   {
     if (hook_)
-      hook_->onNodeInspect(this, gv);
+      return hook_->onNodeInspect(this, gv);
+    return false;
   }
 
-  void onInspectData(GraphView const& gv)
+  bool onInspectData(GraphView const& gv)
   {
     if (hook_)
-      hook_->onInspectNodeData(this, gv);
+      return hook_->onInspectNodeData(this, gv);
+    return false;
   }
 };
 
@@ -397,6 +401,15 @@ struct CommentBox
   std::string text = "";
 };
 
+class UndoStack
+{
+public:
+  virtual ~UndoStack() {}
+  virtual bool stash(Graph const& g) = 0;
+  virtual bool undo(Graph& g) = 0;
+  virtual bool redo(Graph& g) = 0;
+};
+
 class Graph
 {
 protected:
@@ -409,7 +422,8 @@ protected:
   std::vector<size_t>  nodeOrder_;
   std::vector<CommentBox> comments_; // TODO: comments
   std::vector<GraphView*> viewers_;
-  std::string          savePath_;
+  std::unique_ptr<UndoStack> undoStack_;
+  mutable std::string  savePath_;
   NodeGraphHook*       hook_    = nullptr;
   void*                payload_ = nullptr;
   size_t               nextViewerId_ = 0;
@@ -441,6 +455,10 @@ public:
   auto const& linkPathes() const { return linkPathes_; }
   auto const& order() const { return nodeOrder_; }
   auto const& viewers() const { return viewers_; }
+
+  bool stash(); // save history
+  bool undo();
+  bool redo();
 
   auto* hook() const { return hook_; }
 
@@ -604,6 +622,7 @@ public:
       }
     }
     notifyViewers();
+    stash();
   }
 
   void removeLink(size_t dstnode, int dstpin, bool bypassHook=false)
@@ -619,6 +638,8 @@ public:
       links_.erase(originalSourceItr);
     }
     linkPathes_.erase(np);
+    notifyViewers();
+    stash();
   }
 
   size_t upstreamNodeOf(size_t nodeidx, int pin)
@@ -652,6 +673,7 @@ public:
     if (oitr != nodeOrder_.end())
       nodeOrder_.erase(oitr);
     notifyViewers();
+    stash();
   }
 
   template<class Container>
@@ -681,6 +703,7 @@ public:
         nodeOrder_.erase(oitr);
     }
     notifyViewers();
+    stash();
   }
 
   template<class Container>
@@ -693,6 +716,7 @@ public:
     for (auto idx : indices) {
       updateLinkPath(idx);
     }
+    notifyViewers();
   }
 
   void onNodeHovered(size_t nodeid)
@@ -741,7 +765,7 @@ public:
   bool partialSave(nlohmann::json& json, std::set<size_t> const& nodes);
   bool partialLoad(nlohmann::json const& json, std::set<size_t> *outPastedNodes=nullptr);
 
-  bool save(nlohmann::json& section, std::string const& path);
+  bool save(nlohmann::json& section, std::string const& path) const;
   bool load(nlohmann::json const& section, std::string const& path);
 };
 

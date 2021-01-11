@@ -354,6 +354,37 @@ bool GraphView::paste()
   }
 }
 
+class UndoStackImpl : public UndoStack
+{
+  std::vector<nlohmann::json> history_;
+  size_t                      cursor_;
+public:
+  bool stash(Graph const& g) override
+  {
+    if (cursor_<history_.size())
+      history_.resize(cursor_);
+    if (g.save(history_.emplace_back(), "")) {
+      ++cursor_;
+      return true;
+    }
+    return false;
+  }
+  bool undo(Graph& g) override
+  {
+    if (history_.empty() || cursor_ == 0)
+      return false;
+    assert(--cursor_<history_.size());
+    return g.load(history_[cursor_], "");
+  }
+  bool redo(Graph& g) override
+  {
+    if (history_.empty() || cursor_+1>=history_.size())
+      return false;
+    ++cursor_;
+    return g.load(history_[cursor_ - 1], "");
+  }
+};
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(glm::vec4, x, y, z, w);
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(glm::vec3, x, y, z);
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(glm::vec2, x, y);
@@ -437,7 +468,6 @@ bool Graph::partialLoad(nlohmann::json const& json, std::set<size_t> *outPastedN
   for (auto const& newitem: idMap) {
     updateLinkPath(newitem.second);
   }
-  this->notifyViewers();
 
   std::set<size_t> newNodes;
   newNodes.clear();
@@ -447,12 +477,16 @@ bool Graph::partialLoad(nlohmann::json const& json, std::set<size_t> *outPastedN
   if (outPastedNodes) {
     *outPastedNodes = newNodes;
   }
+  bool succeed = true;
   if (hook_)
-    return hook_->onPartialLoad(this, json, newNodes, idMap);
-  return true;
+    succeed &= hook_->onPartialLoad(this, json, newNodes, idMap);
+
+  this->notifyViewers();
+  stash();
+  return succeed;
 }
 
-bool Graph::save(nlohmann::json& section, std::string const& path)
+bool Graph::save(nlohmann::json& section, std::string const& path) const
 {
   auto& uigraph = section["uigraph"];
   auto& nodesection = uigraph["nodes"];
@@ -482,6 +516,8 @@ bool Graph::save(nlohmann::json& section, std::string const& path)
   if (hook_) {
     hook_->onSave(this, section, path);
   }
+  if (!path.empty())
+    savePath_ = path;
 
   return true;
 }
@@ -532,14 +568,37 @@ bool Graph::load(nlohmann::json const& section, std::string const& path)
   for(auto const& n: nodes_)
     updateLinkPath(n.first);
 
-  this->notifyViewers();
   for (auto *v: viewers_) {
     focusSelected(*v);
   }
+  bool succeed = true;
   if(hook_) {
-    return hook_->onLoad(this, section, path);
+    succeed &= hook_->onLoad(this, section, path);
   }
-  return true;
+  this->notifyViewers();
+  undoStack_.reset(nullptr);
+  return succeed;
+}
+
+bool Graph::stash()
+{
+  if (!undoStack_)
+    undoStack_.reset(new UndoStackImpl());
+  return undoStack_->stash(*this);
+}
+
+bool Graph::undo()
+{
+  if (!undoStack_)
+    return false;
+  return undoStack_->undo(*this);
+}
+
+bool Graph::redo()
+{
+  if (!undoStack_)
+    return false;
+  return undoStack_->redo(*this);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////
@@ -575,7 +634,8 @@ void updateInspectorView(GraphView& gv, char const* name)
 
     ImGui::Separator();
 
-    node.onInspect(gv);
+    if(node.onInspect(gv))
+      gv.graph->stash();
   };
   if (gv.focusingNode != -1)
     inspect(gv.focusingNode);
@@ -596,6 +656,7 @@ void updateInspectorView(GraphView& gv, char const* name)
         for (auto id : gv.nodeSelection) {
           gv.graph->noderef(id).setColor(avgColor);
         }
+        gv.graph->stash();
       }
       // TODO: multi-editing
     }
@@ -1075,7 +1136,9 @@ void updateNetworkView(GraphView& gv, char const* name)
       }
     }
     if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
-      if (gv.uiState == GraphView::UIState::BOX_SELECTING ||
+      if (gv.uiState == GraphView::UIState::DRAGGING_NODES) {
+        graph.stash();
+      } else if (gv.uiState == GraphView::UIState::BOX_SELECTING ||
           gv.uiState == GraphView::UIState::BOX_DESELECTING) {
         gv.nodeSelection = unconfirmedNodeSelection;
       } else if (gv.uiState == GraphView::UIState::VIEWING) {
@@ -1089,13 +1152,13 @@ void updateNetworkView(GraphView& gv, char const* name)
         confirmNewNodePlacing(gv, toCanvas * mousePos);
       } else if (gv.uiState == GraphView::UIState::DRAGGING_LINK_HEAD) {
         if (hoveredPin.type == NodePin::OUTPUT) {
-          gv.graph->addLink(hoveredPin.nodeIndex,
-                            hoveredPin.pinNumber,
-                            gv.pendingLink.destiny.nodeIndex,
-                            gv.pendingLink.destiny.pinNumber);
+          graph.addLink(hoveredPin.nodeIndex,
+                        hoveredPin.pinNumber,
+                        gv.pendingLink.destiny.nodeIndex,
+                        gv.pendingLink.destiny.pinNumber);
           gv.pendingLink = {};
         } else if (hoveredPin.type == NodePin::NONE && hoveredNode != -1) {
-          gv.graph->addLink(
+          graph.addLink(
               hoveredNode, 0, gv.pendingLink.destiny.nodeIndex, gv.pendingLink.destiny.pinNumber);
           gv.pendingLink = {};
         } else if (hoveredNode == -1 && hoveredPin.type == NodePin::NONE) {
@@ -1105,13 +1168,13 @@ void updateNetworkView(GraphView& gv, char const* name)
         }
       } else if (gv.uiState == GraphView::UIState::DRAGGING_LINK_TAIL) {
         if (hoveredPin.type == NodePin::INPUT) {
-          gv.graph->addLink(gv.pendingLink.source.nodeIndex,
-                            gv.pendingLink.source.pinNumber,
-                            hoveredPin.nodeIndex,
-                            hoveredPin.pinNumber);
+          graph.addLink(gv.pendingLink.source.nodeIndex,
+                        gv.pendingLink.source.pinNumber,
+                        hoveredPin.nodeIndex,
+                        hoveredPin.pinNumber);
           gv.pendingLink = {};
         } else if (hoveredPin.type == NodePin::NONE && hoveredNode != -1) {
-          gv.graph->addLink(
+          graph.addLink(
               gv.pendingLink.source.nodeIndex, gv.pendingLink.source.pinNumber, hoveredNode, 0);
           gv.pendingLink = {};
         } else if (hoveredNode == -1 && hoveredPin.type == NodePin::NONE) {
@@ -1122,60 +1185,60 @@ void updateNetworkView(GraphView& gv, char const* name)
       } else if (gv.uiState == GraphView::UIState::DRAGGING_LINK_BODY) {
         if (hoveredPin.type == NodePin::INPUT &&
             hoveredPin.nodeIndex != gv.pendingLink.source.nodeIndex) {
-          gv.graph->removeLink(gv.pendingLink.destiny.nodeIndex, gv.pendingLink.destiny.pinNumber);
+          graph.removeLink(gv.pendingLink.destiny.nodeIndex, gv.pendingLink.destiny.pinNumber);
           if (modKey == ImGuiKeyModFlags_Alt) { // swap link
             auto const& pendingSrc = gv.pendingLink.source;
             auto const& pendingDst = gv.pendingLink.destiny;
             auto hvitr = gv.graph->links().find(hoveredPin);
             if (hvitr != gv.graph->links().end()) {
               auto const& hoverSource = hvitr->second;
-              gv.graph->addLink(hoverSource.nodeIndex, hoverSource.pinNumber, pendingDst.nodeIndex, pendingDst.pinNumber);
+              graph.addLink(hoverSource.nodeIndex, hoverSource.pinNumber, pendingDst.nodeIndex, pendingDst.pinNumber);
             }
           }
-          gv.graph->addLink(gv.pendingLink.source.nodeIndex,
-                            gv.pendingLink.source.pinNumber,
-                            hoveredPin.nodeIndex,
-                            hoveredPin.pinNumber);
+          graph.addLink(gv.pendingLink.source.nodeIndex,
+                        gv.pendingLink.source.pinNumber,
+                        hoveredPin.nodeIndex,
+                        hoveredPin.pinNumber);
           gv.pendingLink = {};
         } else if (hoveredPin.type == NodePin::OUTPUT &&
                    hoveredPin.nodeIndex != gv.pendingLink.destiny.nodeIndex) {
           if (modKey == ImGuiKeyModFlags_Alt) { // swap link
-            auto cnt = std::count_if(gv.graph->links().begin(), gv.graph->links().end(),
+            auto cnt = std::count_if(graph.links().begin(), graph.links().end(),
               [hoveredPin](std::pair<NodePin, NodePin> const& rec) {
                 return rec.second == hoveredPin;
               });
             if (cnt == 1) { // do swaping only when there is only one dest connection
-              auto hvitr = std::find_if(gv.graph->links().begin(), gv.graph->links().end(),
+              auto hvitr = std::find_if(graph.links().begin(), graph.links().end(),
                 [hoveredPin](std::pair<NodePin, NodePin> const& rec) {
                   return rec.second == hoveredPin;
                 });
-              if (hvitr != gv.graph->links().end()) {
-                auto pditr = gv.graph->links().find(gv.pendingLink.destiny);
-                if (pditr != gv.graph->links().end()) {
+              if (hvitr != graph.links().end()) {
+                auto pditr = graph.links().find(gv.pendingLink.destiny);
+                if (pditr != graph.links().end()) {
                   // add link from pending link's source to hovered pin's destiny
-                  gv.graph->addLink(pditr->second.nodeIndex, pditr->second.pinNumber, hvitr->first.nodeIndex, hvitr->first.pinNumber);
+                  graph.addLink(pditr->second.nodeIndex, pditr->second.pinNumber, hvitr->first.nodeIndex, hvitr->first.pinNumber);
                 }
               }
             }
           }
-          gv.graph->removeLink(gv.pendingLink.destiny.nodeIndex, gv.pendingLink.destiny.pinNumber);
-          gv.graph->addLink(hoveredPin.nodeIndex,
-                            hoveredPin.pinNumber,
-                            gv.pendingLink.destiny.nodeIndex,
-                            gv.pendingLink.destiny.pinNumber);
+          graph.removeLink(gv.pendingLink.destiny.nodeIndex, gv.pendingLink.destiny.pinNumber);
+          graph.addLink(hoveredPin.nodeIndex,
+                        hoveredPin.pinNumber,
+                        gv.pendingLink.destiny.nodeIndex,
+                        gv.pendingLink.destiny.pinNumber);
           gv.pendingLink = {};
         } else if (hoveredNode != -1) {
-          gv.graph->removeLink(gv.pendingLink.destiny.nodeIndex, gv.pendingLink.destiny.pinNumber);
+          graph.removeLink(gv.pendingLink.destiny.nodeIndex, gv.pendingLink.destiny.pinNumber);
           auto const& node = gv.graph->noderef(hoveredNode);
           if (node.maxInputCount() > 0 && hoveredNode != gv.pendingLink.source.nodeIndex) {
-            gv.graph->addLink(
+            graph.addLink(
                 gv.pendingLink.source.nodeIndex, gv.pendingLink.source.pinNumber, hoveredNode, 0);
           }
           if (node.outputCount() > 0 && hoveredNode != gv.pendingLink.destiny.nodeIndex) {
-            gv.graph->addLink(hoveredNode,
-                              0,
-                              gv.pendingLink.destiny.nodeIndex,
-                              gv.pendingLink.destiny.pinNumber);
+            graph.addLink(hoveredNode,
+                          0,
+                          gv.pendingLink.destiny.nodeIndex,
+                          gv.pendingLink.destiny.pinNumber);
           }
           gv.pendingLink = {};
         } else {
@@ -1231,6 +1294,10 @@ void updateNetworkView(GraphView& gv, char const* name)
       gv.nodeSelection.clear();
       for (auto const& n : gv.graph->nodes())
         gv.nodeSelection.insert(n.first);
+    } else if (ImGui::IsKeyPressed('Z') && modKey==ImGuiKeyModFlags_Ctrl) { // Undo
+      gv.graph->undo();
+    } else if (ImGui::IsKeyPressed('R') && modKey==ImGuiKeyModFlags_Ctrl) { // Redo
+      gv.graph->redo();
     }
   } // Mouse inside canvas?
 
@@ -1254,6 +1321,10 @@ void updateNetworkView(GraphView& gv, char const* name)
   
   // Reset states on mouse release
   if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+    // was dragging ...
+    if (gv.uiState == GraphView::UIState::DRAGGING_NODES) {
+      graph.stash();
+    }
     // confirm node selection
     if (gv.uiState == GraphView::UIState::BOX_SELECTING ||
         gv.uiState == GraphView::UIState::BOX_DESELECTING) {
