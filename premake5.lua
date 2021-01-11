@@ -154,6 +154,10 @@ project('nodegrapher')
   links(laterlinks())
   filter('system:windows')
     links({ "ole32", "ws2_32", "advapi32", "version"})
+  filter({'action:vs*'})
+    buildoptions({'/std:c++17'})
+  filter({'toolset:clang or gcc'})
+    buildoptions({'-std=c++17'})
 
   
   

@@ -284,7 +284,9 @@ void init()
   globalConfig().fonts.largeStrongFont = largeFont;
 
   // TODO: read config file
-  globalConfig().fonts.monoFont = atlas->AddFontFromFileTTF("res/sarasa-mono-sc-regular.ttf", 14, nullptr, atlas->GetGlyphRangesChineseSimplifiedCommon());
+  std::ifstream test_file_readable("res/sarasa-mono-sc-regular.ttf");
+  if (test_file_readable.good())
+    globalConfig().fonts.monoFont = atlas->AddFontFromFileTTF("res/sarasa-mono-sc-regular.ttf", 14, nullptr, atlas->GetGlyphRangesChineseSimplifiedCommon());
   if (!globalConfig().fonts.monoFont) {
     globalConfig().fonts.monoFont = atlas->AddFontFromMemoryCompressedTTF(get_sourcecodepro_compressed_data(), get_sourcecodepro_compressed_size(), 14, nullptr, atlas->GetGlyphRangesChineseSimplifiedCommon());
   }
