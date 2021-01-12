@@ -371,17 +371,18 @@ public:
   }
   bool undo(Graph& g) override
   {
-    if (history_.empty() || cursor_ == 0)
+    if (history_.empty() || cursor_ < 1)
       return false;
-    assert(--cursor_<history_.size());
+    --cursor_;
+    assert(cursor_<history_.size());
     return g.load(history_[cursor_], "");
   }
   bool redo(Graph& g) override
   {
-    if (history_.empty() || cursor_+1>=history_.size())
+    if (history_.empty() || cursor_ + 1 >= history_.size())
       return false;
     ++cursor_;
-    return g.load(history_[cursor_ - 1], "");
+    return g.load(history_[cursor_], "");
   }
 };
 
@@ -576,7 +577,10 @@ bool Graph::load(nlohmann::json const& section, std::string const& path)
     succeed &= hook_->onLoad(this, section, path);
   }
   this->notifyViewers();
-  undoStack_.reset(nullptr);
+  if (succeed && !path.empty()) {
+    undoStack_.reset(nullptr);
+    savePath_ = path;
+  }
   return succeed;
 }
 
