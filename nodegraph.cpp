@@ -357,12 +357,12 @@ bool GraphView::paste()
 class UndoStackImpl : public UndoStack
 {
   std::vector<nlohmann::json> history_;
-  size_t                      cursor_;
+  ptrdiff_t                   cursor_=-1;
 public:
   bool stash(Graph const& g) override
   {
-    if (cursor_<history_.size())
-      history_.resize(cursor_);
+    if (cursor_ + 1 < history_.size()) // 0 reserved
+      history_.resize(cursor_ + 1);
     if (g.save(history_.emplace_back(), "")) {
       ++cursor_;
       return true;
@@ -569,17 +569,18 @@ bool Graph::load(nlohmann::json const& section, std::string const& path)
   for(auto const& n: nodes_)
     updateLinkPath(n.first);
 
-  for (auto *v: viewers_) {
-    focusSelected(*v);
-  }
   bool succeed = true;
   if(hook_) {
     succeed &= hook_->onLoad(this, section, path);
   }
   this->notifyViewers();
-  if (succeed && !path.empty()) {
+  if (!path.empty()) {
     undoStack_.reset(nullptr);
+    stash();
     savePath_ = path;
+    for (auto *v: viewers_) {
+      focusSelected(*v);
+    }
   }
   return succeed;
 }
