@@ -40,7 +40,7 @@
 // [X] optimize link routing
 // [X] focus to selected nodes / frame all nodes
 // [X] copy / paste
-// [ ] undo / redo / edit history tree
+// [~] undo / redo / edit history tree
 // [ ] node shape
 // [ ] read-only view
 // [ ] editing policy / limited allowed action
@@ -297,6 +297,33 @@ void deinit()
   // TODO: deinit
 }
 
+FontScope::FontScope(FontScope::Font f)
+{
+  switch (f) {
+  case FontScope::MONOSPACE:
+    ImGui::PushFont(globalConfig().fonts.monoFont);
+    break;
+  case FontScope::LARGE:
+    ImGui::PushFont(globalConfig().fonts.largeFont);
+    break;
+  case FontScope::LARGESTRONG:
+    ImGui::PushFont(globalConfig().fonts.largeStrongFont);
+    break;
+  case FontScope::STRONG:
+    ImGui::PushFont(globalConfig().fonts.strongFont);
+    break;
+  case FontScope::REGULAR:
+  default:
+    ImGui::PushFont(globalConfig().fonts.defaultFont);
+    break;
+  }
+}
+
+FontScope::~FontScope()
+{
+  ImGui::PopFont();
+}
+
 NodeIdAllocator* NodeIdAllocator::instance_ = nullptr;
 NodeIdAllocator& NodeIdAllocator::instance()
 {
@@ -354,6 +381,7 @@ bool GraphView::paste()
   }
 }
 
+// TODO: too naive, refactor this
 class UndoStackImpl : public UndoStack
 {
   std::vector<nlohmann::json> history_;
@@ -1385,34 +1413,34 @@ void updateDatasheetView(GraphView& gv, char const* name)
     return;
   }
 
-  ImGui::PushFont(globalConfig().fonts.monoFont);
-  if (gv.focusingNode != -1) {
-    try {
-      gv.graph->noderef(gv.focusingNode).onInspectData(gv);
-    } catch (std::exception const& e) {
-      ImGui::Text("Error: %s", e.what());
-    }
-  } else {
-    if (ImGui::BeginTabBar("datasheet", ImGuiTabBarFlags_AutoSelectNewTabs)) {
-      if (gv.nodeSelection.size() == 1 && *gv.nodeSelection.begin() != -1) {
-        if (ImGui::BeginTabItem("datasheet")) {
-          try {
-            gv.graph->noderef(*gv.nodeSelection.begin()).onInspectData(gv);
-          } catch (std::exception const& e) {
-            ImGui::Text("Error: %s", e.what());
+  {
+    FontScope monoscope(FontScope::MONOSPACE);
+    if (gv.focusingNode != -1) {
+      try {
+        gv.graph->noderef(gv.focusingNode).onInspectData(gv);
+      } catch (std::exception const& e) {
+        ImGui::Text("Error: %s", e.what());
+      }
+    } else {
+      if (ImGui::BeginTabBar("datasheet", ImGuiTabBarFlags_AutoSelectNewTabs)) {
+        if (gv.nodeSelection.size() == 1 && *gv.nodeSelection.begin() != -1) {
+          if (ImGui::BeginTabItem("datasheet")) {
+            try {
+              gv.graph->noderef(*gv.nodeSelection.begin()).onInspectData(gv);
+            } catch (std::exception const& e) {
+              ImGui::Text("Error: %s", e.what());
+            }
+            ImGui::EndTabItem();
           }
+        }
+        if (ImGui::BeginTabItem("global state")) {
+          gv.graph->onInspectSummary(gv);
           ImGui::EndTabItem();
         }
+        ImGui::EndTabBar();
       }
-      if (ImGui::BeginTabItem("global state")) {
-        gv.graph->onInspectSummary(gv);
-        ImGui::EndTabItem();
-      }
-      ImGui::EndTabBar();
     }
   }
-  ImGui::PopFont();
-
   ImGui::End();
 }
 
@@ -1587,8 +1615,7 @@ void updateAndDraw(GraphView& gv, char const* name, size_t id)
 
 void edit(Graph& graph, char const* name)
 {
-  if (globalConfig().fonts.defaultFont)
-    ImGui::PushFont(globalConfig().fonts.defaultFont);
+  FontScope regularscope(FontScope::REGULAR);
   std::set<GraphView*> closedViews;
   auto viewers_cpy = graph.viewers();
   for (auto* view: viewers_cpy) {
@@ -1604,9 +1631,6 @@ void edit(Graph& graph, char const* name)
   for(auto* view: closedViews) {
     graph.removeViewer(view);
   }
-  if (globalConfig().fonts.defaultFont)
-    ImGui::PopFont();
-
   // for style tweeking:
   // ImGui::ShowStyleEditor();
 }

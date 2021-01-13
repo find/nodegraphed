@@ -769,6 +769,22 @@ public:
   bool load(nlohmann::json const& section, std::string const& path);
 };
 
+class FontScope
+{
+public:
+  enum Font
+  {
+    REGULAR,
+    MONOSPACE,
+    LARGE,
+    STRONG,
+    LARGESTRONG
+  };
+
+  FontScope(Font font);
+  ~FontScope();
+};
+
 void init(); // TODO: config?
 void edit(Graph& graph, char const* name);
 void deinit();
