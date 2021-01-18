@@ -393,7 +393,7 @@ class UndoStackImpl : public UndoStack
 public:
   bool stash(Graph const& g) override
   {
-    if (cursor_ + 1 < history_.size()) // 0 reserved
+    if (cursor_ + 1 < ptrdiff_t(history_.size())) // 0 reserved
       history_.resize(cursor_ + 1);
     if (g.save(history_.emplace_back(), "")) {
       ++cursor_;
@@ -411,7 +411,7 @@ public:
   }
   bool redo(Graph& g) override
   {
-    if (history_.empty() || cursor_ + 1 >= history_.size())
+    if (history_.empty() || cursor_ + 1 >= ptrdiff_t(history_.size()))
       return false;
     ++cursor_;
     return g.load(history_[cursor_], "");
