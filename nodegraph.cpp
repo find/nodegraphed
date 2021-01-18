@@ -370,6 +370,10 @@ void GraphView::copy()
 bool GraphView::paste()
 {
   auto cb = ImGui::GetClipboardText();
+  if (!cb) {
+    spdlog::warn("nothing to paste");
+    return false;
+  }
   try {
     auto json = nlohmann::json::parse(cb);
     if (!json.is_object())
