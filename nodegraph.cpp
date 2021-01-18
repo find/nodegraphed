@@ -766,8 +766,7 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
 
   // Draw Links
   for (auto const& link : gv.graph->links()) {
-    if (gv.uiState == GraphView::UIState::DRAGGING_LINK_BODY &&
-        gv.pendingLink.destiny == link.first)
+    if (gv.pendingLink.destiny == link.first)
       continue;
     auto path = transform(gv.graph->linkPath(link.first), toScreen);
     drawList->AddPolyline(
