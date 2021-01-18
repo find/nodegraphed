@@ -1444,6 +1444,7 @@ void updateDatasheetView(GraphView& gv, char const* name)
   ImGui::End();
 }
 
+static bool showStyleEditor = false;
 void updateAndDraw(GraphView& gv, char const* name, size_t id)
 {
   std::string focusing = "";
@@ -1564,6 +1565,7 @@ void updateAndDraw(GraphView& gv, char const* name, size_t id)
         if (auto* hook=gv.graph->hook()) {
           hook->onToolMenu(gv.graph, gv);
         }
+        ImGui::MenuItem("Style Editor", nullptr, &showStyleEditor);
         ImGui::EndMenu();
       }
       if (ImGui::BeginMenu("Help")) {
@@ -1631,8 +1633,8 @@ void edit(Graph& graph, char const* name)
   for(auto* view: closedViews) {
     graph.removeViewer(view);
   }
-  // for style tweeking:
-  // ImGui::ShowStyleEditor();
+  if (showStyleEditor)
+    ImGui::ShowStyleEditor();
 }
 
 } // namespace editorui
