@@ -1319,6 +1319,7 @@ void updateNetworkView(GraphView& gv, char const* name)
     } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape)) &&
                gv.uiState == GraphView::UIState::PLACING_NEW_NODE) { // reset
       gv.uiState = GraphView::UIState::VIEWING;
+      gv.pendingLink = {};
     } else if (ImGui::IsKeyPressed('F')) { // focus
       focusSelected(gv);
     } else if (ImGui::IsKeyPressed('C') && modKey==ImGuiKeyModFlags_Ctrl) { // copy
