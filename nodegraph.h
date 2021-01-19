@@ -1,4 +1,5 @@
 #pragma once
+#include "fa_icondef.h"
 #include <glm/glm.hpp>
 #include <nlohmann/json_fwd.hpp>
 
@@ -133,6 +134,7 @@ public:
   virtual int getNodeMinInputCount(Node const* node) { return 1; }
   virtual int getNodeMaxInputCount(Node const* node) { return 4; }
   virtual int getNodeOutputCount(Node const* node) { return 1; }
+  virtual char const* getIcon(Node const* node) { return ICON_FA_MICROCHIP; } // icon text / use with fontawesome
 
   /// called after the default shape has been drawn
   /// you may draw some kind of overlays there
@@ -245,6 +247,8 @@ public:
   }
 
   Type type() const { return type_; }
+
+  char const* icon() const { return hook_ ? hook_->getIcon(this) : nullptr; }
 
   int minInputCount() const
   {

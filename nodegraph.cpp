@@ -265,10 +265,15 @@ static auto& globalConfig()
       ImFont* largeFont = nullptr;
       ImFont* largeStrongFont = nullptr;
       ImFont* monoFont = nullptr;
+      ImFont* stdIconFont = nullptr;
+      ImFont* largeIconFont = nullptr;
     } fonts;
   } config;
   return config;
 }
+
+#include "fa_solid.hpp"
+#include "fa_icondef.h"
 
 void init()
 {
@@ -282,6 +287,10 @@ void init()
 
   globalConfig().fonts.largeFont = largeFont;
   globalConfig().fonts.largeStrongFont = largeFont;
+
+  static const ImWchar rangesIcons[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
+  globalConfig().fonts.stdIconFont = atlas->AddFontFromMemoryCompressedTTF(FontAwesomeSolid_compressed_data, FontAwesomeSolid_compressed_size, 16.8, nullptr, rangesIcons);
+  globalConfig().fonts.largeIconFont = atlas->AddFontFromMemoryCompressedTTF(FontAwesomeSolid_compressed_data, FontAwesomeSolid_compressed_size, 42, nullptr, rangesIcons);
 
   // TODO: read config file
   std::ifstream test_file_readable("res/sarasa-mono-sc-regular.ttf");
@@ -863,6 +872,21 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
       if (canvasScale >= 1.5f && globalConfig().fonts.largeFont)
         ImGui::PopFont();
 
+      // Icon
+      if (char const* icon = node.icon()) {
+        ImFont* font = nullptr;
+        if (canvasScale >= 1.5f && globalConfig().fonts.largeIconFont)
+          font = globalConfig().fonts.largeIconFont;
+        else
+          font = globalConfig().fonts.stdIconFont;
+
+        if (font) {
+          float const iconHeight = size.y * canvasScale * 0.7f;
+          auto textSize = font->CalcTextSizeA(iconHeight, 8192, 0, icon);
+          drawList->AddText(font, iconHeight, imvec(center) - textSize / 2, imcolor(highlight(color, -0.8f, -0.7f, 1.0f)), icon);
+        }
+      }
+
       node.onDraw(gv);
     } else if (node.type() == Node::Type::ANCHOR) {
       drawList->AddCircleFilled(imvec(center), 8, imcolor(color));
@@ -1322,18 +1346,21 @@ void updateNetworkView(GraphView& gv, char const* name)
       gv.pendingLink = {};
     } else if (ImGui::IsKeyPressed('F')) { // focus
       focusSelected(gv);
-    } else if (ImGui::IsKeyPressed('C') && modKey==ImGuiKeyModFlags_Ctrl) { // copy
+    } else if (ImGui::IsKeyPressed('C') && modKey == ImGuiKeyModFlags_Ctrl) { // copy
       gv.copy();
-    } else if (ImGui::IsKeyPressed('V') && modKey==ImGuiKeyModFlags_Ctrl) { // paste
+    } else if (ImGui::IsKeyPressed('X') && modKey == ImGuiKeyModFlags_Ctrl) { // cut
+      gv.copy();
+      graph.removeNodes(gv.nodeSelection);
+    } else if (ImGui::IsKeyPressed('V') && modKey == ImGuiKeyModFlags_Ctrl) { // paste
       gv.paste();
       gv.uiState = GraphView::UIState::VIEWING;
-    } else if (ImGui::IsKeyPressed('A') && modKey==ImGuiKeyModFlags_Ctrl) { // Select All
+    } else if (ImGui::IsKeyPressed('A') && modKey == ImGuiKeyModFlags_Ctrl) { // Select All
       gv.nodeSelection.clear();
       for (auto const& n : gv.graph->nodes())
         gv.nodeSelection.insert(n.first);
-    } else if (ImGui::IsKeyPressed('Z') && modKey==ImGuiKeyModFlags_Ctrl) { // Undo
+    } else if (ImGui::IsKeyPressed('Z') && modKey == ImGuiKeyModFlags_Ctrl) { // Undo
       gv.graph->undo();
-    } else if (ImGui::IsKeyPressed('R') && modKey==ImGuiKeyModFlags_Ctrl) { // Redo
+    } else if (ImGui::IsKeyPressed('R') && modKey == ImGuiKeyModFlags_Ctrl) { // Redo
       gv.graph->redo();
     }
   } // Mouse inside canvas?
