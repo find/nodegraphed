@@ -321,6 +321,12 @@ FontScope::FontScope(FontScope::Font f)
   case FontScope::STRONG:
     ImGui::PushFont(globalConfig().fonts.strongFont);
     break;
+  case FontScope::ICON:
+    ImGui::PushFont(globalConfig().fonts.stdIconFont);
+    break;
+  case FontScope::LARGEICON:
+    ImGui::PushFont(globalConfig().fonts.largeIconFont);
+    break;
   case FontScope::REGULAR:
   default:
     ImGui::PushFont(globalConfig().fonts.defaultFont);

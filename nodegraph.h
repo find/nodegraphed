@@ -782,7 +782,9 @@ public:
     MONOSPACE,
     LARGE,
     STRONG,
-    LARGESTRONG
+    LARGESTRONG,
+    ICON,
+    LARGEICON
   };
 
   FontScope(Font font);
