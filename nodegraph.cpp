@@ -1498,7 +1498,8 @@ void updateNetworkView(GraphView& gv, char const* name)
     if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Enter))) { // confirm
       if (gv.uiState == GraphView::UIState::PLACING_NEW_NODE)
         confirmNewNodePlacing(gv, toCanvas * mousePos);
-    } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Delete))) { // delete
+    } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Delete)) ||
+               ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Backspace))) { // delete
       spdlog::debug("removing nodes [{}] from view {}", fmt::join(gv.nodeSelection, ", "), name);
       graph.removeNodes(gv.nodeSelection);
     } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Tab)) &&
