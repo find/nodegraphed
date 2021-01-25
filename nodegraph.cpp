@@ -540,7 +540,20 @@ bool GraphView::paste()
     auto json = nlohmann::json::parse(cb);
     if (!json.is_object())
       return false;
-    return graph && graph->partialLoad(json, &nodeSelection);
+    if (graph && graph->partialLoad(json, &nodeSelection)) {
+      // move to viewport center
+      glm::vec2 center = { 0,0 };
+      for (size_t idx: nodeSelection) {
+        center += graph->noderef(idx).pos();
+      }
+      center /= nodeSelection.size();
+      auto bias = -canvasOffset - center;
+      graph->moveNodes(nodeSelection, bias);
+      graph->stash();
+      return true;
+    } else {
+      return false;
+    }
   } catch(nlohmann::json::parse_error const& e) {
     spdlog::warn("json parse error: {}", e.what());
     return false;
