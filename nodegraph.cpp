@@ -1110,6 +1110,10 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
       stroke[i] = imvec(toScreen * glm::vec3(gv.linkCuttingStroke[i], 1.0f));
     drawList->AddPolyline(stroke.data(), int(stroke.size()), IM_COL32(255, 0, 0, 233), false, 2);
   }
+
+  if (auto hook = gv.graph->hook()) {
+    hook->onGraphDraw(gv.graph, gv);
+  }
 }
 
 void updateContextMenu(GraphView& gv)
@@ -1299,12 +1303,20 @@ void updateNetworkView(GraphView& gv, char const* name)
   }
   // Mouse action - the dirty part
   if (mouseInsideCanvas && ImGui::IsWindowHovered()) {
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+      graph.onClicked(hoveredNode, ImGuiMouseButton_Left);
+    else if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+      graph.onClicked(hoveredNode, ImGuiMouseButton_Right);
+    else if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+      graph.onDoubleClicked(hoveredNode, ImGuiMouseButton_Left);
+    else if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Right))
+      graph.onDoubleClicked(hoveredNode, ImGuiMouseButton_Right);
+
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
       clickedNode   = hoveredNode;
       clickedPin    = hoveredPin;
       gv.activeNode = clickedNode;
       if (clickedNode != -1) {
-        graph.onNodeClicked(clickedNode, 0);
         gv.uiState = GraphView::UIState::DRAGGING_NODES;
         if (gv.nodeSelection.find(clickedNode) == gv.nodeSelection.end()) {
           gv.nodeSelection = {clickedNode};
@@ -1353,7 +1365,7 @@ void updateNetworkView(GraphView& gv, char const* name)
       }
       if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
         if (clickedNode != -1)
-          graph.onNodeDoubleClicked(clickedNode, 1);
+          graph.onDoubleClicked(clickedNode, 1);
       }
       if (gv.uiState == GraphView::UIState::VIEWING) {
         gv.selectionBoxStart = {mousePos.x, mousePos.y};
