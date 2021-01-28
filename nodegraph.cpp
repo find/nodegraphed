@@ -1040,16 +1040,25 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
 
       // Icon
       if (char const* icon = node.icon()) {
-        ImFont* font = nullptr;
-        if (canvasScale >= 1.5f && globalConfig().fonts.largeIconFont)
-          font = globalConfig().fonts.largeIconFont;
-        else
-          font = globalConfig().fonts.stdIconFont;
+        if (icon[0]) {
+          ImFont* font = nullptr;
+          if (unsigned char(icon[0]) == 0xEF) {
+            if (canvasScale >= 1.5f && globalConfig().fonts.largeIconFont)
+              font = globalConfig().fonts.largeIconFont;
+            else
+              font = globalConfig().fonts.stdIconFont;
+          } else {
+            if (canvasScale >= 1.5f && globalConfig().fonts.largeIconFont)
+              font = globalConfig().fonts.largeFont;
+            else
+              font = globalConfig().fonts.defaultFont;
+          }
 
-        if (font) {
-          float const iconHeight = size.y * canvasScale * 0.7f;
-          auto textSize = font->CalcTextSizeA(iconHeight, 8192, 0, icon);
-          drawList->AddText(font, iconHeight, imvec(center) - textSize / 2, imcolor(highlight(color, -0.8f, -0.7f, 1.0f)), icon);
+          if (font) {
+            float const iconHeight = size.y * canvasScale * 0.7f;
+            auto textSize = font->CalcTextSizeA(iconHeight, 8192, 0, icon);
+            drawList->AddText(font, iconHeight, imvec(center) - textSize / 2, imcolor(highlight(color, -0.8f, -0.7f, 1.0f)), icon);
+          }
         }
       }
 
