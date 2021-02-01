@@ -134,6 +134,7 @@ public:
   virtual int getNodeMinInputCount(Node const* node) { return 1; }
   virtual int getNodeMaxInputCount(Node const* node) { return 4; }
   virtual int getNodeOutputCount(Node const* node) { return 1; }
+  virtual char const* getPinDescription(Node const* node, NodePin const& pin) { return nullptr; }
   virtual char const* getIcon(Node const* node) { return ICON_FA_MICROCHIP; } // icon text / use with fontawesome
 
   /// called after the default shape has been drawn
