@@ -598,6 +598,62 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(glm::vec3, x, y, z);
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(glm::vec2, x, y);
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(NodePin, type, nodeIndex, pinNumber);
 
+std::vector<glm::vec2> Graph::genLinkPath(glm::vec2 const& start,
+                                          glm::vec2 const& end,
+                                          float            avoidenceWidth)
+{
+  std::vector<glm::vec2> path;
+
+  float xcenter = (start.x + end.x) * 0.5f;
+  float ycenter = (start.y + end.y) * 0.5f;
+  float dx      = end.x - start.x;
+  float dy      = end.y - start.y;
+  auto  sign    = [](float x) { return x > 0 ? 1 : x < 0 ? -1 : 0; };
+
+  if (dy < 42) {
+    if (dy < 20 && std::fabs(dx) < avoidenceWidth) {
+      xcenter += sign(dx) * avoidenceWidth;
+    }
+    auto endextend = end + glm::vec2(0, -10);
+    dy -= 20;
+
+    path.push_back(start);
+    path.push_back(start + glm::vec2(0, 10));
+    if (fabs(dx) > fabs(dy) * 2) {
+      path.emplace_back(xcenter - sign(dx * dy) * dy / 2, path.back().y);
+      path.emplace_back(xcenter + sign(dx * dy) * dy / 2, endextend.y);
+    } else {
+      path.emplace_back(xcenter, path.back().y);
+      path.emplace_back(xcenter, endextend.y);
+    }
+    path.push_back(endextend);
+    path.push_back(end);
+  } else {
+    path.push_back(start);
+    if (fabs(dx) >= 0.33f) {
+      if (dy > fabs(dx) + 42) {
+        if (dy < 80) {
+          path.emplace_back(start.x, ycenter - fabs(dx) / 2);
+          path.emplace_back(end.x, ycenter + fabs(dx) / 2);
+        } else {
+          path.emplace_back(start.x, end.y - fabs(dx) - 20);
+          path.emplace_back(end.x, end.y - 20);
+        }
+      } else {
+        path.emplace_back(start.x, start.y + 20);
+        if (dy < fabs(dx) + 40) {
+          path.emplace_back(start.x + sign(dx) * (dy - 40) / 2, ycenter);
+          path.emplace_back(end.x - sign(dx) * (dy - 40) / 2, ycenter);
+        }
+        path.emplace_back(end.x, end.y - 20);
+      }
+    }
+    path.push_back(end);
+  }
+  return path;
+}
+
+
 bool Graph::partialSave(nlohmann::json& json, std::set<size_t> const& nodes)
 {
   auto& uigraph = json["uigraph"];
@@ -1010,7 +1066,7 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
           drawList->AddCircleFilled(
             toScreen * imvec(node.inputPinPos(i)), pinRadius, imcolor(pincolor), pinSegs);
         }
-      } else {
+      } else { // TODO: handle many pins
         auto left = node.inputPinPos(0);
         auto right = node.inputPinPos(icount - 1);
         drawList->AddRectFilled(toScreen * imvec(left + glm::vec2{ 6,-6 }), toScreen * imvec(right + glm::vec2{ -6,0 }), imcolor(color), 6);
@@ -1068,6 +1124,20 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
     }
   }
 
+  // Pin name tips
+  if (gv.hoveredPin.pinNumber != -1) {
+    auto& node = gv.graph->noderef(gv.hoveredPin.nodeIndex);
+    if (auto* hook = gv.graph->hook()) {
+      if (auto const* pindesc = hook->getPinDescription(&node, gv.hoveredPin)) {
+        if (*pindesc) {
+          ImGui::BeginTooltip();
+          ImGui::Text("%s", pindesc);
+          ImGui::EndTooltip();
+        }
+      }
+    }
+  }
+
   // Pending node
   if (gv.uiState == GraphView::UIState::PLACING_NEW_NODE) {
     auto const   center      = mousePos;
@@ -1082,7 +1152,7 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
   // Pending Links ...
   auto drawLink = [&gv, drawList, &toScreen, &toCanvas](glm::vec2 const& start,
                                                        glm::vec2 const& end) {
-    auto path = transform(gv.graph->genLinkPath(start, end), toScreen);
+    auto path = transform(Graph::genLinkPath(start, end), toScreen);
     drawList->AddPolyline(path.data(),
                           int(path.size()),
                           IM_COL32(233, 233, 233, 233),

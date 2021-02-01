@@ -533,58 +533,9 @@ public:
       v->onGraphChanged();
   }
 
-  std::vector<glm::vec2> genLinkPath(glm::vec2 const& start,
-                                     glm::vec2 const& end,
-                                     float            avoidenceWidth = DEFAULT_NODE_SIZE.x)
-  {
-    std::vector<glm::vec2> path;
-
-    float xcenter = (start.x + end.x) * 0.5f;
-    float ycenter = (start.y + end.y) * 0.5f;
-    float dx      = end.x - start.x;
-    float dy      = end.y - start.y;
-    auto  sign    = [](float x) { return x > 0 ? 1 : x < 0 ? -1 : 0; };
-
-    if (dy < 42) {
-      if (dy < 20 && std::fabs(dx) < avoidenceWidth) {
-        xcenter += sign(dx) * avoidenceWidth;
-      }
-      auto endextend = end + glm::vec2(0, -10);
-      dy -= 20;
-
-      path.push_back(start);
-      path.push_back(start + glm::vec2(0, 10));
-      if (fabs(dx) > fabs(dy) * 2) {
-        path.emplace_back(xcenter - sign(dx * dy) * dy / 2, path.back().y);
-        path.emplace_back(xcenter + sign(dx * dy) * dy / 2, endextend.y);
-      } else {
-        path.emplace_back(xcenter, path.back().y);
-        path.emplace_back(xcenter, endextend.y);
-      }
-      path.push_back(endextend);
-      path.push_back(end);
-    } else {
-      path.push_back(start);
-      if (dy > fabs(dx) + 42) {
-        if (dy < 80) {
-          path.emplace_back(start.x, ycenter - fabs(dx) / 2);
-          path.emplace_back(end.x, ycenter + fabs(dx) / 2);
-        } else {
-          path.emplace_back(start.x, end.y - fabs(dx) - 20);
-          path.emplace_back(end.x, end.y - 20);
-        }
-      } else {
-        path.emplace_back(start.x, start.y + 20);
-        if (dy < fabs(dx) + 40) {
-          path.emplace_back(start.x + sign(dx) * (dy - 40) / 2, ycenter);
-          path.emplace_back(end.x - sign(dx) * (dy - 40) / 2, ycenter);
-        }
-        path.emplace_back(end.x, end.y - 20);
-      }
-      path.push_back(end);
-    }
-    return path;
-  }
+  static std::vector<glm::vec2> genLinkPath(glm::vec2 const& start,
+                                            glm::vec2 const& end,
+                                            float            avoidenceWidth = DEFAULT_NODE_SIZE.x);
 
   void updateLinkPath(size_t nodeidx, int ipin = -1)
   {
