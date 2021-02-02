@@ -611,14 +611,15 @@ std::vector<glm::vec2> Graph::genLinkPath(glm::vec2 const& start,
   auto  sign    = [](float x) { return x > 0 ? 1 : x < 0 ? -1 : 0; };
 
   if (dy < 42) {
-    if (dy < 20 && std::fabs(dx) < avoidenceWidth) {
-      xcenter += sign(dx) * avoidenceWidth;
+    if (dy < 32 && fabs(dx)<=fabs(dy)*2) {
+      // xcenter += sign(dx) * avoidenceWidth;
+      xcenter = start.x - sign(dx) * avoidenceWidth;
     }
-    auto endextend = end + glm::vec2(0, -10);
-    dy -= 20;
+    auto endextend = end + glm::vec2(0, -16);
+    dy -= 32;
 
     path.push_back(start);
-    path.push_back(start + glm::vec2(0, 10));
+    path.push_back(start + glm::vec2(0, 16));
     if (fabs(dx) > fabs(dy) * 2) {
       path.emplace_back(xcenter - sign(dx * dy) * dy / 2, path.back().y);
       path.emplace_back(xcenter + sign(dx * dy) * dy / 2, endextend.y);
@@ -1417,11 +1418,14 @@ void updateNetworkView(GraphView& gv, char const* name)
               graph.noderef(link.second.nodeIndex).outputPinPos(link.second.pinNumber);
           auto const linkEnd =
               graph.noderef(link.first.nodeIndex).inputPinPos(link.first.pinNumber);
-          if (AABB<glm::vec2>(linkStart, linkEnd).expanded(12).contains(mouseInLocal)) {
-            auto const& linkPath = graph.linkPath(link.first);
+          auto const& linkPath = graph.linkPath(link.first);
+          auto linkAABB = AABB<glm::vec2>(linkStart, linkEnd);
+          for (auto const& pt : linkPath)
+            linkAABB.merge(pt);
+          if (linkAABB.expanded(12).contains(mouseInLocal)) {
             for (size_t i = 1; i < linkPath.size(); ++i) {
               if (pointSegmentDistance(mouseInLocal, linkPath[i - 1], linkPath[i]) <
-                  3 * canvasScale) {
+                  5 * canvasScale) {
                 gv.uiState     = GraphView::UIState::DRAGGING_LINK_BODY;
                 gv.pendingLink = {{NodePin::OUTPUT, link.second.nodeIndex, link.second.pinNumber},
                                   {NodePin::INPUT, link.first.nodeIndex, link.first.pinNumber}};
