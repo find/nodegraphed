@@ -622,7 +622,7 @@ std::vector<glm::vec2> Graph::genLinkPath(glm::vec2 const& start,
 
     path.push_back(start);
     path.push_back(start + glm::vec2(0, EXTEND));
-    if (fabs(dx) > fabs(dy) * 2 && fabs(dx) > fabs(restdy) + LOOP_CORNER_SIZE * 8) {
+    if (fabs(dx) > fabs(restdy)*2 + LOOP_CORNER_SIZE * 8) {
       path.emplace_back(start.x + sign(dx) * LOOP_CORNER_SIZE, path.back().y + LOOP_CORNER_SIZE);
       path.emplace_back(xcenter - sign(dx * restdy) * restdy / 2 - sign(dx) * LOOP_CORNER_SIZE, path.back().y);
       path.emplace_back(xcenter + sign(dx * restdy) * restdy / 2 + sign(dx) * LOOP_CORNER_SIZE, endextend.y - LOOP_CORNER_SIZE);
