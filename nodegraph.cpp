@@ -606,11 +606,11 @@ std::vector<glm::vec2> Graph::genLinkPath(glm::vec2 const& start,
   const float LOOP_CORNER_SIZE = 8.f;
   const float EXTEND = 16.f;
 
-  float xcenter = (start.x + end.x) * 0.5f;
-  float ycenter = (start.y + end.y) * 0.5f;
-  float dx      = end.x - start.x;
-  float dy      = end.y - start.y;
-  auto  sign    = [](float x) { return x > 0 ? 1 : x < 0 ? -1 : 0; };
+  float xcenter  = (start.x + end.x) * 0.5f;
+  float ycenter  = (start.y + end.y) * 0.5f;
+  float const dx = end.x - start.x;
+  float const dy = end.y - start.y;
+  auto  sign     = [](float x) { return x > 0 ? 1 : x < 0 ? -1 : 0; };
 
   if (dy < EXTEND*2 + LOOP_CORNER_SIZE*2) {
     if (fabs(dx)<=fabs(dy)*2) {
@@ -622,18 +622,18 @@ std::vector<glm::vec2> Graph::genLinkPath(glm::vec2 const& start,
 
     path.push_back(start);
     path.push_back(start + glm::vec2(0, EXTEND));
-    if (fabs(restdy) >= 1) {
-      if (fabs(dx) > fabs(dy) * 2) {
-        path.emplace_back(xcenter - sign(dx * restdy) * restdy / 2, path.back().y);
-        path.emplace_back(xcenter + sign(dx * restdy) * restdy / 2, endextend.y);
-      } else if (restdy < 0) {
-        path.emplace_back(start.x + sign(xcenter - start.x) * LOOP_CORNER_SIZE, start.y + EXTEND + LOOP_CORNER_SIZE);
-        path.emplace_back(xcenter, path.back().y);
-        path.emplace_back(xcenter + sign(xcenter - start.x) * LOOP_CORNER_SIZE, path.back().y - LOOP_CORNER_SIZE);
-        path.emplace_back(xcenter + sign(xcenter - start.x) * LOOP_CORNER_SIZE, endextend.y);
-        path.emplace_back(xcenter, endextend.y - LOOP_CORNER_SIZE);
-        path.emplace_back(end.x + sign(xcenter - end.x) * LOOP_CORNER_SIZE, end.y - EXTEND - LOOP_CORNER_SIZE);
-      }
+    if (fabs(dx) > fabs(dy) * 2 && fabs(dx) > fabs(restdy) + LOOP_CORNER_SIZE * 8) {
+      path.emplace_back(start.x + sign(dx) * LOOP_CORNER_SIZE, path.back().y + LOOP_CORNER_SIZE);
+      path.emplace_back(xcenter - sign(dx * restdy) * restdy / 2 - sign(dx) * LOOP_CORNER_SIZE, path.back().y);
+      path.emplace_back(xcenter + sign(dx * restdy) * restdy / 2 + sign(dx) * LOOP_CORNER_SIZE, endextend.y - LOOP_CORNER_SIZE);
+      path.emplace_back(end.x - sign(dx) * LOOP_CORNER_SIZE, endextend.y - LOOP_CORNER_SIZE);
+    } else if (restdy < 0) {
+      path.emplace_back(start.x + sign(xcenter - start.x) * LOOP_CORNER_SIZE, start.y + EXTEND + LOOP_CORNER_SIZE);
+      path.emplace_back(xcenter - sign(xcenter - start.x) * LOOP_CORNER_SIZE, path.back().y);
+      path.emplace_back(xcenter, path.back().y - LOOP_CORNER_SIZE);
+      path.emplace_back(xcenter, endextend.y);
+      path.emplace_back(xcenter + sign(end.x - xcenter) * LOOP_CORNER_SIZE, endextend.y - LOOP_CORNER_SIZE);
+      path.emplace_back(end.x - sign(end.x - xcenter) * LOOP_CORNER_SIZE, end.y - EXTEND - LOOP_CORNER_SIZE);
     }
     path.push_back(endextend);
     path.push_back(end);
