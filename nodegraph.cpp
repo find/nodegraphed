@@ -603,6 +603,8 @@ std::vector<glm::vec2> Graph::genLinkPath(glm::vec2 const& start,
                                           float            avoidenceWidth)
 {
   std::vector<glm::vec2> path;
+  const float LOOP_CORNER_SIZE = 8.f;
+  const float EXTEND = 16.f;
 
   float xcenter = (start.x + end.x) * 0.5f;
   float ycenter = (start.y + end.y) * 0.5f;
@@ -610,22 +612,28 @@ std::vector<glm::vec2> Graph::genLinkPath(glm::vec2 const& start,
   float dy      = end.y - start.y;
   auto  sign    = [](float x) { return x > 0 ? 1 : x < 0 ? -1 : 0; };
 
-  if (dy < 42) {
-    if (dy < 32 && fabs(dx)<=fabs(dy)*2) {
+  if (dy < EXTEND*2 + LOOP_CORNER_SIZE*2) {
+    if (fabs(dx)<=fabs(dy)*2) {
       // xcenter += sign(dx) * avoidenceWidth;
       xcenter = start.x - sign(dx) * avoidenceWidth;
     }
-    auto endextend = end + glm::vec2(0, -16);
-    dy -= 32;
+    auto endextend = end + glm::vec2(0, -EXTEND);
+    float const restdy = dy - EXTEND*2;
 
     path.push_back(start);
-    path.push_back(start + glm::vec2(0, 16));
-    if (fabs(dx) > fabs(dy) * 2) {
-      path.emplace_back(xcenter - sign(dx * dy) * dy / 2, path.back().y);
-      path.emplace_back(xcenter + sign(dx * dy) * dy / 2, endextend.y);
-    } else {
-      path.emplace_back(xcenter, path.back().y);
-      path.emplace_back(xcenter, endextend.y);
+    path.push_back(start + glm::vec2(0, EXTEND));
+    if (fabs(restdy) >= 1) {
+      if (fabs(dx) > fabs(dy) * 2) {
+        path.emplace_back(xcenter - sign(dx * restdy) * restdy / 2, path.back().y);
+        path.emplace_back(xcenter + sign(dx * restdy) * restdy / 2, endextend.y);
+      } else if (restdy < 0) {
+        path.emplace_back(start.x + sign(xcenter - start.x) * LOOP_CORNER_SIZE, start.y + EXTEND + LOOP_CORNER_SIZE);
+        path.emplace_back(xcenter, path.back().y);
+        path.emplace_back(xcenter + sign(xcenter - start.x) * LOOP_CORNER_SIZE, path.back().y - LOOP_CORNER_SIZE);
+        path.emplace_back(xcenter + sign(xcenter - start.x) * LOOP_CORNER_SIZE, endextend.y);
+        path.emplace_back(xcenter, endextend.y - LOOP_CORNER_SIZE);
+        path.emplace_back(end.x + sign(xcenter - end.x) * LOOP_CORNER_SIZE, end.y - EXTEND - LOOP_CORNER_SIZE);
+      }
     }
     path.push_back(endextend);
     path.push_back(end);
@@ -640,7 +648,7 @@ std::vector<glm::vec2> Graph::genLinkPath(glm::vec2 const& start,
           path.emplace_back(start.x, end.y - fabs(dx) - 20);
           path.emplace_back(end.x, end.y - 20);
         }
-      } else {
+      } else if (dy>40) {
         path.emplace_back(start.x, start.y + 20);
         if (dy < fabs(dx) + 40) {
           path.emplace_back(start.x + sign(dx) * (dy - 40) / 2, ycenter);
