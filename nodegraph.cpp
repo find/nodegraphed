@@ -1107,7 +1107,7 @@ void drawGraph(GraphView const& gv, std::set<size_t> const& unconfirmedNodeSelec
       if (char const* icon = node.icon()) {
         if (icon[0]) {
           ImFont* font = nullptr;
-          if (unsigned char(icon[0]) == 0xEF) {
+          if (static_cast<unsigned char>(icon[0]) == 0xEF) {
             if (canvasScale >= 1.5f && globalConfig().fonts.largeIconFont)
               font = globalConfig().fonts.largeIconFont;
             else
